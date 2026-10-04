@@ -1,0 +1,13 @@
+/build/
+/.deps/
+/.tmp/
+/profiles/
+/captures/
+/for ai/
+/out/
+/.vs/
+/.idea/
+/.vscode/
+*.user
+*.suo
+*.VC.db

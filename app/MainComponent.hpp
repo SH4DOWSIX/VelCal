@@ -1,0 +1,145 @@
+#pragma once
+
+#include "velcal/profile.hpp"
+#include "MidiEngine.hpp"
+
+#include <JuceHeader.h>
+
+#include <memory>
+#include <optional>
+
+class MainComponent final : public juce::Component,
+                            private juce::ComboBox::Listener,
+                            private juce::Button::Listener,
+                            private juce::Slider::Listener,
+                            private juce::ScrollBar::Listener,
+                            private juce::Timer {
+public:
+    MainComponent();
+    ~MainComponent() override;
+
+    void paint(juce::Graphics& graphics) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
+
+private:
+    void comboBoxChanged(juce::ComboBox* comboBox) override;
+    void buttonClicked(juce::Button* button) override;
+    void sliderValueChanged(juce::Slider* slider) override;
+    void scrollBarMoved(juce::ScrollBar* scrollBar, double newRangeStart) override;
+    void mouseWheelMove(
+        const juce::MouseEvent& event,
+        const juce::MouseWheelDetails& wheel) override;
+    void timerCallback() override;
+    void refreshMidiInputs();
+    void refreshMidiOutputs();
+    void loadAppState();
+    void saveAppState() const;
+    void restoreMidiSelections(
+        const juce::String& inputIdentifier,
+        const juce::String& inputName,
+        const juce::String& outputIdentifier,
+        const juce::String& outputName,
+        bool useVirtualOutput);
+    void refreshProfileList();
+    void selectProfileInList(const juce::File& file);
+    void updateRouting();
+    void updateCapture();
+    void showCaptureGuide();
+    void beginSectionCapture();
+    void finishSectionCapture();
+    void chooseProfile();
+    void loadProfile(const juce::File& file);
+    void deleteSelectedProfile();
+    void deleteProfileConfirmed(const juce::File& file);
+    void createNewProfile();
+    void replaceWithNewProfile();
+    void clearMeasurements();
+    void clearMeasurementsConfirmed();
+    void saveCurrentProfile();
+    void writeProfile(const juce::File& file);
+    void setActiveTab(bool globalCurveTab);
+    void refreshCurvePresets();
+    void applySelectedCurvePreset();
+    void saveCurvePreset();
+    void updateEffectiveMaps();
+    void updateEditingControls();
+    void ensureEditableCurve();
+    std::vector<velcal::VelocityCurvePoint> sampledCurrentCurve() const;
+    std::vector<velcal::VelocityCurvePoint>& editableCurvePoints();
+    bool& editableCurveSmooth();
+    juce::Rectangle<float> curvePlotBounds() const;
+    void paintCurveAxes(juce::Graphics& graphics, juce::Rectangle<float> plot);
+    void paintCurveHandles(
+        juce::Graphics& graphics,
+        juce::Rectangle<float> plot,
+        const std::vector<velcal::VelocityCurvePoint>& points);
+    void updateLabels();
+    void paintKeyboard(juce::Graphics& graphics, juce::Rectangle<float> bounds);
+    void paintCurve(juce::Graphics& graphics, juce::Rectangle<float> bounds);
+    void paintGlobalCurve(juce::Graphics& graphics, juce::Rectangle<float> bounds);
+    void paintMetric(
+        juce::Graphics& graphics,
+        juce::Rectangle<float> bounds,
+        const juce::String& label,
+        const juce::String& value,
+        juce::Colour accent);
+    std::optional<std::uint8_t> noteAtPosition(juce::Point<float> position) const;
+    static juce::String midiNoteName(std::uint8_t note);
+
+    juce::Label titleLabel;
+    juce::TextButton perKeyTabButton{"Per-key calibration"};
+    juce::TextButton globalTabButton{"Global curve"};
+    juce::Label deviceLabel;
+    juce::ComboBox midiInputBox;
+    juce::Label outputLabel;
+    juce::ComboBox midiOutputBox;
+    juce::ToggleButton routingToggle{"Route MIDI"};
+    juce::Label keyGroupLabel;
+    juce::ComboBox keyGroupBox;
+    juce::TextButton captureButton{"Start section"};
+    juce::TextButton newProfileButton{"New profile"};
+    juce::TextButton clearProfileButton{"Clear data"};
+    juce::TextButton openProfileButton{"Open profile"};
+    juce::TextButton saveProfileButton{"Save profile"};
+    juce::TextButton deleteProfileButton{"Delete"};
+    juce::Label keyAdjustmentLabel;
+    juce::Slider keyAdjustmentSlider;
+    juce::TextButton resetKeyButton{"Reset key"};
+    juce::Label presetLabel;
+    juce::ComboBox globalPresetBox;
+    juce::Label curvatureLabel;
+    juce::Slider curvatureSlider;
+    juce::Label minimumVelocityLabel;
+    juce::Slider minimumVelocitySlider;
+    juce::Label maximumVelocityLabel;
+    juce::Slider maximumVelocitySlider;
+    juce::TextButton savePresetButton{"Save preset"};
+    juce::TextButton resetGlobalButton{"Reset curve"};
+    juce::ToggleButton smoothCurveToggle{"Smooth"};
+    juce::ScrollBar keyboardScrollBar{false};
+    juce::ComboBox profileBox;
+    juce::Label selectedNoteLabel;
+    juce::Label statusLabel;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<juce::Component> captureGuide;
+    juce::Array<juce::MidiDeviceInfo> midiInputs;
+    juce::Array<juce::MidiDeviceInfo> midiOutputs;
+    juce::Array<juce::File> profileFiles;
+    MidiEngine midiEngine;
+    std::optional<velcal::CalibrationProfile> profile;
+    juce::File profileFile;
+    std::uint64_t captureStartMessageCount{};
+    std::uint8_t selectedNote{60};
+    bool showingGlobalCurve{};
+    bool updatingControls{};
+    bool updatingProfileList{};
+    std::optional<std::size_t> activeCurvePoint;
+    juce::Rectangle<float> keyboardBounds;
+    juce::Rectangle<float> keyboardKeyBounds;
+    juce::Rectangle<float> curveBounds;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
+};
