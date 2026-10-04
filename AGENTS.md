@@ -8,6 +8,22 @@
 - Keep that plan current when a change materially alters behavior, architecture,
   profile compatibility, testing status, or priorities.
 
+## Default Windows build
+
+- Use `build-portable.bat` in the workspace root as the standard Windows build
+  workflow. For agent/terminal runs, use `.\build-portable.bat --no-pause`.
+- This builds Windows x64 Release in `build/windows-portable`, runs the core
+  tests, and creates a new portable folder and ZIP under `build/portable`.
+- Keep portable behavior intact: profiles and app preferences belong in
+  `profiles/` beside the executable, and the MSVC runtime is linked statically.
+- Never bundle personal profiles, preferences, or captures in the package.
+- Package the EXE, licence, and an empty profiles directory. Keep the repository
+  README and setup instructions on GitHub rather than copying them into the ZIP.
+- Use Debug builds only for specific debugging needs; the portable Release is
+  the default build to deliver for local use and verification.
+- Keep build instructions in `README.md` and `docs/PLAN.md` consistent with this
+  workflow. Building locally does not authorize publication or a GitHub update.
+
 ## GitHub updates
 
 - Keep development changes local by default. A request to implement, fix, test,

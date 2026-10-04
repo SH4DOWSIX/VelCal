@@ -4,6 +4,11 @@ project(VelCal VERSION 0.1.0 LANGUAGES C CXX)
 
 option(VELCAL_BUILD_TESTS "Build the VelCal core tests" ON)
 option(VELCAL_BUILD_APP "Build the JUCE desktop application" ON)
+option(VELCAL_PORTABLE "Store desktop app data beside its executable" OFF)
+
+if(MSVC AND VELCAL_PORTABLE)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 include(FetchContent)
 set(FETCHCONTENT_BASE_DIR "${CMAKE_SOURCE_DIR}/.deps" CACHE PATH
@@ -73,10 +78,18 @@ if(WIN32)
 endif()
 
 if(VELCAL_BUILD_APP)
+    set(VELCAL_ICON "${CMAKE_SOURCE_DIR}/resources/app-icon.png")
+    juce_add_binary_data(velcal_icon
+        HEADER_NAME VelCalIcon.h
+        NAMESPACE VelCalIcon
+        SOURCES "${VELCAL_ICON}"
+    )
     juce_add_gui_app(velcal_app
         PRODUCT_NAME "VelCal"
         COMPANY_NAME "VelCal"
         BUNDLE_ID "org.velcal.app"
+        ICON_BIG "${VELCAL_ICON}"
+        ICON_SMALL "${VELCAL_ICON}"
     )
     juce_generate_juce_header(velcal_app)
     target_sources(velcal_app PRIVATE
@@ -91,12 +104,23 @@ if(VELCAL_BUILD_APP)
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         VELCAL_DEFAULT_PROFILE_DIR="${CMAKE_SOURCE_DIR}/profiles"
+        VELCAL_PORTABLE=$<BOOL:${VELCAL_PORTABLE}>
     )
     target_link_libraries(velcal_app PRIVATE
         velcal_core
+        velcal_icon
         juce::juce_audio_devices
         juce::juce_gui_extra
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
     )
+    if(UNIX AND NOT APPLE)
+        include(GNUInstallDirs)
+        install(TARGETS velcal_app RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+        install(FILES "${VELCAL_ICON}"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/pixmaps"
+            RENAME org.velcal.app.png)
+        install(FILES resources/org.velcal.app.desktop
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+    endif()
 endif()

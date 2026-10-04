@@ -198,6 +198,18 @@ The piano rendering uses correct black-key placement over white-key joins. At
 narrow widths it keeps a minimum white-key width and scrolls horizontally rather
 than compressing all 88 keys.
 
+Application icons use the user-supplied `resources/app-icon.png`
+unchanged. The source was recovered from the previous build's embedded bytes
+after the original workspace-root file was removed, so rebuilds retain the icon.
+The recovered source PNG is local-only and ignored by Git at the user's request;
+do not include it in a GitHub update without explicit authorization. A source
+checkout without this local asset needs it supplied before building the app.
+JUCE generates the Windows EXE icon and macOS bundle ICNS from this source. The
+same image is embedded for the native window icon, including Linux. Linux CMake
+installation also installs the executable, PNG icon, and
+`resources/org.velcal.app.desktop` launcher. Platform-generated icons stay under
+the build tree; the portable Windows EXE requires no separate image file.
+
 Keyboard status display:
 
 - No strip: no calibration observations
@@ -212,9 +224,16 @@ on the output axis and `0, 32, 64, 96, 127` on the input axis. Internally Note O
 velocity 0 is not used because it conventionally means Note Off.
 
 App-wide state is stored in `profiles/.velcal-app-state.json` so this workspace
-stays on `D:`. Startup restores the last selected MIDI input, MIDI output
-including the virtual-output option, and last profile when those resources are
-available.
+stays on `D:`. Startup restores the last selected MIDI input, installed MIDI
+output, and last profile when those resources are available. The virtual-output
+selection is supported only on macOS/Linux; an old Windows virtual-output
+preference leaves the output unselected.
+
+The optional `VELCAL_PORTABLE` build stores profiles and app preferences in
+`profiles/` beside the executable instead of the development workspace. Profile
+chooser defaults use the same directory. Last-profile paths inside that directory
+are saved relatively so they survive moving the portable folder. External profile
+paths remain absolute. Normal development builds keep their existing storage.
 
 ### MIDI Routing
 
@@ -229,8 +248,14 @@ available.
 - Capture and routing are mutually exclusive.
 
 On Windows, selecting an already-installed virtual MIDI cable works. The
-application's `VelCal Output (virtual)` option is present but cannot currently be
-created by the legacy Windows JUCE backend.
+unavailable `VelCal Output (virtual)` option has been removed from the Windows
+output list. Users create a port with loopMIDI (or another installed virtual MIDI
+cable), keep it running, restart VelCal to discover it, and select the same port
+as VelCal's output and the DAW's input. README contains setup instructions.
+Windows requires an explicit output selection on first use; missing selections
+show a generic selection warning when routing is requested. loopMIDI setup
+guidance belongs in README only, not in the app. macOS/Linux retain the native
+virtual-output option, but remain untested.
 
 ## Real Hardware and Test Evidence
 
@@ -276,6 +301,37 @@ outlier resistance, held-out consistency improvement, deadband behavior,
 overlapping/disconnected sections, global curves, editable monotonic curves, and
 profile round trips including control points and per-note overrides.
 
+The Windows output-list change (removing built-in virtual output and adding
+a generic missing-selection warning) builds successfully in Debug; the core
+suite still passes 1/1. The changed selection and warning UI has not yet received
+a physical DAW test. MSBuild reports an existing shared-intermediate-directory
+warning involving a conflict-named generated resource project under `build`.
+
+Local portable Release verification on 2026-10-04: `build-portable.bat --no-pause`
+completed configuration, x64 Release compilation, CTest (1/1 passed), and folder/
+ZIP packaging. Extracting the ZIP into a different `.tmp` folder with spaces,
+launching from another working directory, and invoking New profile through UI
+Automation wrote valid preferences beside the relocated EXE; the app closed
+normally. DLL import inspection found only Windows components, with no dynamic
+MSVC runtime dependency. The package contains no personal profiles/preferences.
+MIDI hardware and a separate Windows machine have not been tested with this build.
+
+App icon verification on 2026-10-04: the standard portable Release build and
+CTest (1/1) passed with the supplied PNG. The packaged EXE icon and the running
+native Windows window icon were extracted and visually confirmed to match the
+source image. The test app closed normally. macOS bundle and Linux launcher/
+window icon configuration remain untested on those platforms.
+
+The local icon source has been renamed to `resources/app-icon.png`; CMake,
+embedded-resource identifiers, and the Git exclusion use the new name. The
+standard portable Release build and CTest (1/1) passed after the rename.
+
+Sidebar padding verification on 2026-10-04: controls in both tabs now have 28px
+left/right inset within the 273px sidebar. The portable Release build and CTest
+(1/1) passed. UI Automation confirmed 217px sidebar dropdown widths in both tabs
+and at minimum window size. Native screenshot capture returned blank images, so
+visual confirmation of this change remains with the user.
+
 ## Known Risks and Limitations
 
 ### Virtual MIDI Endpoint Stall
@@ -299,6 +355,10 @@ deliberately retested and proven resolved. When testing it, record:
 Do not remove the bounded queue/flood cutoff without equivalent protection.
 
 ### Windows Virtual Endpoint
+
+The current Windows product workflow uses user-created virtual MIDI cables.
+Native Windows endpoint creation is optional future work, not a requirement for
+the current release workflow.
 
 JUCE 9.0.3 can use Windows MIDI Services when configured with
 `NEEDS_WINDOWS_MIDI_SERVICES TRUE`, but this build does not enable it. Prior
@@ -332,8 +392,8 @@ user's explicit permission.
 - Quick/Recommended/Thorough capture modes are not implemented.
 - There is no one-click calibration bypass/A-B validation view.
 - The curve editor has no keyboard-accessible point editing yet.
-- Packaging, installers, signing, CI, release automation, and release binaries do
-  not exist.
+- A local Windows portable build script exists; installers, signing, CI, public
+  release automation, and published release binaries do not exist.
 - `LICENSE` contains an SPDX declaration and link, not the full AGPL text.
 
 ## Prioritized Next Work
@@ -384,8 +444,9 @@ Treat failures found here as higher priority than new features.
 
 1. Reproduce or close out the virtual MIDI endpoint stall investigation.
 2. Add robust device hot-plug refresh and unavailable-device states.
-3. Implement the production Windows MIDI Services virtual endpoint when the
-   supported in-box API/toolchain is available and distributable.
+3. Optionally evaluate a production Windows MIDI Services virtual endpoint when
+   the supported in-box API/toolchain is available and distributable; the current
+   Windows workflow uses user-created cables such as loopMIDI.
 4. Build and test CoreMIDI virtual output on macOS.
 5. Build and test ALSA sequencer virtual output on Linux.
 6. Add automated tests around routing order, passthrough, queue overflow, and
@@ -419,7 +480,22 @@ Treat failures found here as higher priority than new features.
 
 ## Build and Run
 
-From `D:\Coding\VelCal`:
+The standard Windows build workflow is `build-portable.bat` from the workspace
+root (or double-click it), producing a local Windows x64 portable Release.
+Agents use `.\build-portable.bat --no-pause`. It configures `build/windows-portable`,
+enables `VELCAL_PORTABLE`, statically links the MSVC runtime, builds the app/core
+tests in Release, runs CTest, and calls `tools/package_windows_portable.ps1`.
+Each successful run creates a new folder and ZIP under `build/portable`, containing
+the EXE, licence, and an empty profiles directory. The repository README and
+setup instructions remain on GitHub and are not bundled. Personal data is never
+copied into the package. Temporary files are directed to `.tmp`; downloaded
+dependencies remain in `.deps`. The script requires existing CMake, Git, Visual
+Studio C++ tools and a Windows SDK; it does not install tools or publish anything.
+Use `build-portable.bat --no-pause` for an unattended terminal run.
+
+For specific debugging or offline-tool work, the separate Debug build remains
+available. It is not the default build for local app delivery. From
+`D:\Coding\VelCal`:
 
 ```powershell
 cmake -S . -B build

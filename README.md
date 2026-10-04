@@ -39,6 +39,10 @@ All project dependencies and generated files must remain on the `D:` drive. Do
 not install project tooling or dependencies system-wide on `C:`. The repository's
 `AGENTS.md` records the storage policy for future development sessions.
 
+Before building the desktop app, supply the local icon source at
+`resources/app-icon.png`. This image is intentionally excluded from Git; it is
+embedded into the executable during the build.
+
 ```powershell
 cmake -S . -B build
 cmake --build build --config Debug
@@ -49,6 +53,24 @@ Build outputs, downloaded dependencies, temporary files, local profiles/app
 preferences, captures, and third-party reference data are excluded from Git.
 Profiles and captures are created locally during use; personal calibration data
 is not bundled with the source repository.
+
+### Local Windows portable Release
+
+Double-click `build-portable.bat` in the repository root. Requires CMake and Git
+on PATH, plus Visual Studio C++ build tools with a Windows SDK already installed.
+The script builds x64 Release, runs the core tests, and creates a fresh portable
+folder and ZIP under `build/portable/`, containing the EXE, licence, and an empty
+profiles directory. The repository README is not bundled. For a terminal run
+without the final pause, use `build-portable.bat --no-pause`.
+
+Extract the ZIP into a writable folder and run `VelCal.exe`. Profiles and app
+preferences are stored in `profiles/` beside the executable. Profiles saved there
+remain discoverable when the folder is moved. Personal profiles, preferences,
+captures, and build tools are not included. The MSVC runtime is linked statically;
+a Windows virtual MIDI cable such as loopMIDI is still needed for DAW routing.
+
+The separate build tree is `build/windows-portable`; dependencies stay in `.deps`
+and the script directs temporary build files to `.tmp`. Nothing is published.
 
 ## Physical capture prototype (Windows)
 
@@ -85,10 +107,26 @@ calibration section:
    section and repeat. Select **Save profile** when finished.
 
 For live use, select an output and enable **Route MIDI**. macOS and Linux JUCE
-backends can create an application-owned virtual endpoint. The current Windows
-build can route to an already installed virtual MIDI output; its built-in
-`VelCal Output` option requires Windows MIDI Services support that is not enabled
-in this build.
+backends support an application-owned `VelCal Output (virtual)` endpoint, but
+these platforms have not yet been built or physically tested for VelCal.
+
+### Windows MIDI setup
+
+VelCal does not create a virtual MIDI cable on Windows. Create one with
+[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html), or use another
+installed virtual MIDI cable. This carries MIDI messages, not audio.
+
+1. Install and open loopMIDI, then create a port named `VelCal Output` with its
+   **+** button. Keep loopMIDI running while using the port.
+2. Start or restart VelCal after creating the port. Select your physical keyboard
+   as **MIDI input** and the loopMIDI port as **MIDI output**.
+3. In your DAW, select the same loopMIDI port as the instrument track's MIDI input.
+4. Enable **Route MIDI** in VelCal. Use the loopMIDI input rather than also
+   receiving the physical keyboard directly, to avoid duplicate notes. Do not
+   route the DAW's MIDI output back to VelCal's input.
+
+VelCal lists installed Windows MIDI outputs only. It remembers the selected port
+when available; it does not automatically choose an output on first use.
 
 Live routing uses a bounded output queue and stops automatically if it detects an
 abnormal message rate or a backed-up MIDI output. Driver sends happen away from
@@ -115,8 +153,7 @@ uses JUCE for its UI and MIDI backends:
 
 - CoreMIDI virtual endpoints on macOS.
 - ALSA sequencer ports on Linux.
-- Windows MIDI Services on supported Windows 11 releases.
-- Selection of an existing third-party virtual cable as a legacy Windows fallback.
+- Selection of an existing virtual cable such as loopMIDI on Windows.
 
 Original measurements are retained in versioned VelCal profiles so correction
 curves can be regenerated when the algorithm improves.

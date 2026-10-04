@@ -86,7 +86,12 @@ private:
 
 juce::File profileDirectory()
 {
+#if VELCAL_PORTABLE
+    return juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+        .getParentDirectory().getChildFile("profiles");
+#else
     return juce::File(VELCAL_DEFAULT_PROFILE_DIR);
+#endif
 }
 
 juce::File appStateFile()
@@ -489,11 +494,18 @@ void MainComponent::refreshMidiInputs()
 void MainComponent::refreshMidiOutputs()
 {
     midiOutputBox.clear();
+#if ! JUCE_WINDOWS
     midiOutputBox.addItem("VelCal Output (virtual)", 1);
+#endif
     midiOutputs = juce::MidiOutput::getAvailableDevices();
     for (int index = 0; index < midiOutputs.size(); ++index)
         midiOutputBox.addItem(midiOutputs[index].name, index + 2);
+#if JUCE_WINDOWS
+    midiOutputBox.setTextWhenNothingSelected(
+        midiOutputs.isEmpty() ? "No MIDI outputs found" : "Select a MIDI output");
+#else
     midiOutputBox.setSelectedId(1, juce::dontSendNotification);
+#endif
 }
 
 void MainComponent::loadAppState()
@@ -513,7 +525,10 @@ void MainComponent::loadAppState()
         restoreMidiSelections(
             inputIdentifier, inputName, outputIdentifier, outputName, useVirtualOutput);
 
-        const auto lastProfile = juce::File(juce::String(json.value("lastProfilePath", "")));
+        const auto lastProfilePath = juce::String(json.value("lastProfilePath", ""));
+        const auto lastProfile = lastProfilePath.isEmpty() ? juce::File{}
+            : juce::File::isAbsolutePath(lastProfilePath) ? juce::File(lastProfilePath)
+            : profileDirectory().getChildFile(lastProfilePath);
         if (lastProfile.existsAsFile())
             loadProfile(lastProfile);
     } catch (...) {
@@ -535,8 +550,15 @@ void MainComponent::saveAppState() const
         json["midiOutputIdentifier"] = midiOutputs[outputIndex].identifier.toStdString();
         json["midiOutputName"] = midiOutputs[outputIndex].name.toStdString();
     }
-    if (profileFile != juce::File{})
+    if (profileFile != juce::File{}) {
+#if VELCAL_PORTABLE
+        json["lastProfilePath"] = (profileFile.isAChildOf(profileDirectory())
+            ? profileFile.getRelativePathFrom(profileDirectory())
+            : profileFile.getFullPathName()).toStdString();
+#else
         json["lastProfilePath"] = profileFile.getFullPathName().toStdString();
+#endif
+    }
 
     try {
         profileDirectory().createDirectory();
@@ -566,6 +588,10 @@ void MainComponent::restoreMidiSelections(
         midiInputBox.setSelectedId(inputId, juce::dontSendNotification);
 
     auto outputId = useVirtualOutput ? 1 : 0;
+#if JUCE_WINDOWS
+    if (useVirtualOutput)
+        outputId = 0;
+#endif
     if (!useVirtualOutput) {
         for (int index = 0; index < midiOutputs.size(); ++index) {
             if ((!outputIdentifier.isEmpty() && midiOutputs[index].identifier == outputIdentifier)
@@ -714,6 +740,14 @@ void MainComponent::updateRouting()
 
     juce::String error;
     const auto createVirtual = midiOutputBox.getSelectedId() == 1;
+    if (!createVirtual && !juce::isPositiveAndBelow(outputIndex, midiOutputs.size())) {
+        routingToggle.setToggleState(false, juce::dontSendNotification);
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::MessageBoxIconType::WarningIcon,
+            "Select a MIDI output",
+            "Select a MIDI output before enabling routing.");
+        return;
+    }
     const auto outputIdentifier = juce::isPositiveAndBelow(outputIndex, midiOutputs.size())
         ? midiOutputs[outputIndex].identifier
         : juce::String{};
@@ -924,7 +958,7 @@ void MainComponent::chooseProfile()
 {
     fileChooser = std::make_unique<juce::FileChooser>(
         "Open VelCal profile",
-        juce::File(VELCAL_DEFAULT_PROFILE_DIR),
+        profileDirectory(),
         "*.velcal.json");
     fileChooser->launchAsync(
         juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
@@ -1120,7 +1154,7 @@ void MainComponent::saveCurrentProfile()
         + ".velcal.json";
     fileChooser = std::make_unique<juce::FileChooser>(
         "Save VelCal profile",
-        juce::File(VELCAL_DEFAULT_PROFILE_DIR).getChildFile(suggestedName),
+        profileDirectory().getChildFile(suggestedName),
         "*.velcal.json");
     fileChooser->launchAsync(
         juce::FileBrowserComponent::saveMode
@@ -1581,7 +1615,7 @@ void MainComponent::resized()
     profileBox.setBounds(header.reduced(12, 5));
 
     area.removeFromTop(18);
-    auto sidebar = area.removeFromLeft(245);
+    auto sidebar = area.removeFromLeft(245).withTrimmedRight(28);
     deviceLabel.setBounds(sidebar.removeFromTop(24));
     midiInputBox.setBounds(sidebar.removeFromTop(38));
     sidebar.removeFromTop(18);

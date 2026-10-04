@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=VelCal
+Comment=MIDI velocity calibration
+Exec=VelCal
+Icon=org.velcal.app
+Terminal=false
+Categories=AudioVideo;Audio;Midi;

@@ -8,7 +8,7 @@ physical MIDI input
   -> immutable per-note velocity lookup tables
   -> per-key manual adjustment
   -> global velocity curve
-  -> application-owned virtual MIDI output
+  -> existing MIDI output (Windows) or application-owned virtual output (macOS/Linux)
   -> DAW or instrument
 ```
 

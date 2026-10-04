@@ -1,6 +1,7 @@
 #include "MainComponent.hpp"
 
 #include <JuceHeader.h>
+#include <VelCalIcon.h>
 
 namespace {
 
@@ -29,11 +30,17 @@ private:
                 DocumentWindow::allButtons)
         {
             setUsingNativeTitleBar(true);
+            const auto appIcon = juce::ImageFileFormat::loadFrom(
+                VelCalIcon::appicon_png,
+                VelCalIcon::appicon_pngSize).rescaled(128, 128);
+            setIcon(appIcon);
             setResizable(true, true);
             setResizeLimits(860, 720, 1800, 1200);
             setContentOwned(new MainComponent(), true);
             centreWithSize(1180, 760);
             setVisible(true);
+            if (auto* peer = getPeer())
+                peer->setIcon(appIcon);
         }
 
         void closeButtonPressed() override
