@@ -28,6 +28,10 @@ or a spirit level, as the calibration bar. Place its edge across a group of
 same-colour keys and press them down together, then fully release them between
 presses. Measure white and black keys separately.
 
+Push down near the middle of the bar to distribute pressure as evenly as possible
+across all the keys beneath it. Pressing harder on one side can make those keys
+appear more responsive and produce an inaccurate calibration.
+
 The keyboard may be measured in sections when the calibration bar cannot span
 the full keybed. Adjacent sections must overlap by at least two same-colour keys;
 three or four is preferable. Each section still needs soft, medium, and hard
