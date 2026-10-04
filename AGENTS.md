@@ -21,7 +21,7 @@
   README and setup instructions on GitHub rather than copying them into the ZIP.
 - Use Debug builds only for specific debugging needs; the portable Release is
   the default build to deliver for local use and verification.
-- Keep build instructions in `README.md` and `docs/PLAN.md` consistent with this
+- Keep build instructions in `docs/BUILDING.md` and `docs/PLAN.md` consistent with this
   workflow. Building locally does not authorize publication or a GitHub update.
 
 ## GitHub portable builds

@@ -505,7 +505,8 @@ Treat failures found here as higher priority than new features.
 - `tools/package_windows_portable.ps1`: Windows portable folder/ZIP packaging
 - `docs/releases/0.0.1.md`: published release notes and security guidance
 - `docs/architecture.md`: concise architectural overview
-- `README.md`: user/build overview
+- `README.md`: user-facing introduction, calibration, routing, and profile guide
+- `docs/BUILDING.md`: build workflows, dependencies, and development tools
 
 ## Build and Run
 

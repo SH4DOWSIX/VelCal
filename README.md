@@ -1,186 +1,150 @@
 # VelCal
 
-VelCal is an open-source, cross-platform MIDI velocity calibration tool. It is
-intended to measure persistent response differences between the individual keys
-of a MIDI keyboard and generate a monotonic correction mapping for each note.
+VelCal is a free, open-source app for making the velocity response of a MIDI
+keyboard more consistent from key to key. If some keys play noticeably louder
+or quieter than others under a similar touch, VelCal can measure those
+differences and adjust the MIDI sent to your DAW or software instrument.
 
-The repository now contains the calibration engine, a JUCE desktop application,
-live short-section capture, profile persistence, and real-time MIDI routing.
+It sits between your keyboard and your instrument. It changes MIDI velocity,
+not audio, and does not change your keyboard's built-in sounds or repair its
+physical action.
 
-## Current scope
+**[Download VelCal](https://github.com/SH4DOWSIX/VelCal/releases/latest)**
 
-- Group near-simultaneous Note On events into calibration presses.
-- Reject incomplete presses, duplicate notes, and events from the wrong key group.
-- Use a robust per-press median as the keyboard reference velocity.
-- Learn a separate nonlinear velocity mapping for each MIDI note.
-- Suppress isolated outliers and corrections inside a configurable deadband.
-- Produce a constant-time 128-entry lookup table for real-time processing.
-- Measure dynamic-range coverage and before/after consistency.
-- Join shorter-bar calibration sections through overlapping reference keys.
-- Infer the keys beneath a short bar from repeated strikes while retaining stray
-  notes as rejected measurements.
-- Apply profile mappings to live MIDI and pass non-Note-On messages through.
+Portable builds are available for Windows, Linux, and macOS. Only Windows has
+been tested with a real keyboard and DAW; Linux and macOS are experimental.
+See the [release notes](docs/releases/0.0.1.md) for system requirements and help
+with unsigned-app security warnings.
 
-## Short-bar calibration
+## What You Can Do
 
-Use a rigid object with a straight, smooth edge, such as a straight piece of wood
-or a spirit level, as the calibration bar. Place its edge across a group of
-same-colour keys and press them down together, then fully release them between
-presses. Measure white and black keys separately.
+- Calibrate individual keys automatically by pressing groups of keys together.
+- Work across the keyboard in short, overlapping sections, with separate passes
+  for white and black keys.
+- Fine-tune a selected key's response with an adjustment slider or editable curve.
+- Change the feel of the whole keyboard with a global curve and presets such as
+  Soft touch, Firm touch, Compressed, and Wide dynamics.
+- Save profiles and load them again for future playing sessions.
+- Send corrected MIDI to your DAW while preserving pedals, pitch bend, and other
+  MIDI messages.
 
-Push down near the middle of the bar to distribute pressure as evenly as possible
-across all the keys beneath it. Pressing harder on one side can make those keys
-appear more responsive and produce an inaccurate calibration.
+## Get Started
 
-The keyboard may be measured in sections when the calibration bar cannot span
-the full keybed. Adjacent sections must overlap by at least two same-colour keys;
-three or four is preferable. Each section still needs soft, medium, and hard
-presses. Shared keys let VelCal estimate the relative response of neighbouring
-sections without knowing the physical force used for either set of presses.
+1. Download the portable package for your operating system and extract the
+   whole folder somewhere writable. On Windows, run `VelCal.exe`; on macOS,
+   open `VelCal.app`; on Linux, run `VelCal.AppImage`.
+2. Connect your MIDI keyboard and select it under **MIDI input**.
+3. Select **New profile** to start a calibration, or **Open profile** to load one
+   you have already saved.
 
-Sections with no overlap are reported as disconnected and cannot provide a
-trustworthy keyboard-wide calibration. White-key and black-key section chains
-remain separate calibration sessions.
+You do not need to set up a MIDI output just to calibrate. Set up routing when
+you are ready to play through your DAW.
 
-## Build
+## Calibrate Your Keyboard
 
-All project dependencies and generated files must remain on the `D:` drive. Do
-not install project tooling or dependencies system-wide on `C:`. The repository's
-`AGENTS.md` records the storage policy for future development sessions.
+Use a rigid object with a straight, smooth edge, such as a straight piece of
+wood or a spirit level. It only needs to cover a short group of keys, not the
+whole keyboard. Make sure it is clean and smooth so it will not scratch the
+keys, and do not use excessive force.
 
-The tracked icon source is `resources/app-icon.png`; it is embedded into the
-executable during the build.
+**Push down near the middle of the object to distribute pressure as evenly as
+possible across the keys.** Pushing harder on one side can produce a bad
+calibration: VelCal may mistake the uneven pressure for a difference between
+the keys themselves.
 
-```powershell
-cmake -S . -B build
-cmake --build build --config Debug
-ctest --test-dir build -C Debug --output-on-failure
+1. In **Per-key calibration**, choose **White keys** under **Calibration keys**.
+   Place the straight edge across a group of white keys.
+2. Select **Start section**, read the guide, then select **Begin capture**.
+3. Press the same group together repeatedly, fully releasing the keys each
+   time. Make a mixture of soft, medium, and firm presses. The first few presses
+   let VelCal identify which keys are under the bar.
+4. Follow the live guidance until the section is ready. Each covered key needs
+   at least eight accepted soft, eight medium, and eight firm measurements.
+   Incomplete or inconsistent presses may not count, so this can take more
+   than 24 presses.
+5. Select **Finish section**. Move the bar along the keyboard, overlapping the
+   previous section by at least two white keys (three or four is better), and
+   repeat for the range you want to calibrate.
+6. Choose **Black keys** and repeat the process for the black keys, overlapping
+   each new black-key section with the previous one.
+7. Select **Save profile** when you are finished.
+
+Keep sections overlapping within each key colour. Without shared keys, VelCal
+cannot reliably compare the response of neighbouring sections. You can calibrate
+just the range you use; uncalibrated keys have no automatic per-key correction.
+
+The keyboard display helps you check progress: amber means a key still needs
+data; cyan means it is being boosted; red means it is being reduced; grey means
+it is already close to neutral. A key without a status strip has no measurements.
+
+## Play Through Your DAW
+
+The MIDI path should be:
+
+```text
+Keyboard -> VelCal -> MIDI port -> DAW or software instrument
 ```
 
-Build outputs, downloaded dependencies, temporary files, local profiles/app
-preferences, captures, and third-party reference data are excluded from Git.
-Profiles and captures are created locally during use; personal calibration data
-is not bundled with the source repository.
+### Windows
 
-### Local Windows portable Release
+VelCal does not create its own virtual MIDI cable on Windows. Use
+[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html), or another
+installed virtual MIDI cable. This is a MIDI connection, not a virtual audio cable.
 
-Double-click `build-portable.bat` in the repository root. Requires CMake and Git
-on PATH, plus Visual Studio C++ build tools with a Windows SDK already installed.
-The script builds x64 Release, runs the core tests, and creates a fresh portable
-folder and ZIP under `build/portable/`, containing the EXE, licence, and an empty
-profiles directory, plus dependency licence notices. The repository README is not bundled. For a terminal run
-without the final pause, use `build-portable.bat --no-pause`.
+1. Install and open loopMIDI. Use its **+** button to create a port named
+   `VelCal Output`, and keep loopMIDI running.
+2. Start or restart VelCal so the port appears. Select your keyboard as
+   **MIDI input** and `VelCal Output` as **MIDI output**.
+3. In your DAW, select that same port as the instrument track's MIDI input.
+   Load a software instrument and enable the track's monitoring as needed.
+4. Load your saved profile in VelCal and enable **Route MIDI**.
 
-Extract the ZIP into a writable folder and run `VelCal.exe`. Profiles and app
-preferences are stored in `profiles/` beside the executable. Profiles saved there
-remain discoverable when the folder is moved. Personal profiles, preferences,
-captures, and build tools are not included. The MSVC runtime is linked statically;
-a Windows virtual MIDI cable such as loopMIDI is still needed for DAW routing.
+Have the instrument track listen to the virtual port rather than also receiving
+the physical keyboard directly, otherwise you may hear duplicate notes or
+uncorrected notes. Do not send the DAW's MIDI output back into VelCal's input.
 
-The separate build tree is `build/windows-portable`; dependencies stay in `.deps`
-and the script directs temporary build files to `.tmp`. Nothing is published.
+### macOS And Linux
 
-### GitHub portable builds
+Select **VelCal Output (virtual)** as VelCal's MIDI output, then select the
+`VelCal Output` port in your DAW and enable **Route MIDI**. You can also select
+an existing MIDI output instead. Native virtual ports are implemented, but
+hardware and DAW behaviour on these platforms has not yet been verified.
 
-The **Portable builds** GitHub Actions workflow builds Windows x64 ZIP, Linux x64
-AppImage (inside a tar.gz), and universal macOS ZIP packages. It runs on pushes,
-pull requests, or manually from the Actions tab, and runs core tests on each OS.
-Download packages from a successful run's artifacts or from a published release.
-Builds do not automatically publish releases.
+## Adjust The Feel
 
-Only Windows has been tested with real MIDI hardware and a DAW. Linux and macOS
-packages remain experimental; report problems through
-[repository issues](https://github.com/SH4DOWSIX/VelCal/issues/new). See the
-[0.0.1 release notes](docs/releases/0.0.1.md) for package requirements and
-unsigned-app security guidance.
+In **Per-key calibration**, select a key on the displayed keyboard to adjust
+it individually. Drag points on its curve, click to add a point, or right-click
+an interior point to remove it. **Reset key** returns it to automatic calibration.
 
-## Physical capture prototype (Windows)
+In **Global curve**, choose a preset or edit the curve to change the response
+of the whole keyboard after the individual key corrections. **Smooth** switches
+between a smooth curve and straight lines between points. You can save custom
+global presets inside your profile.
 
-After building, run `build/Debug/velcal_capture.exe`. The console utility lists
-MIDI inputs, learns the keys under a short bar, records repeated presses, and can
-continue through overlapping sections. It writes accepted and rejected raw events
-to the project's `captures/` directory as CSV, even when launched by double-click.
-This is an instrumentation tool for tuning the provisional
-algorithm, not the finished application or real-time MIDI processor.
+Use **Save profile** after calibration or editing. Changes are not saved
+automatically, and there is currently no unsaved-change warning when closing.
+Portable builds keep profiles and preferences in `profiles/` beside the app;
+keep that folder when moving or updating VelCal, and back up important profiles.
 
-Saved captures can be reprocessed with the latest algorithm without replaying the
-keyboard:
+## Notes And Help
 
-```powershell
-.\build\Debug\velcal_analyze.exe .\captures\your-capture.csv
-```
+- The display always shows 88 keys, even for smaller keyboards; MIDI processing
+  supports all 128 MIDI notes.
+- Different octave naming conventions are not a problem: VelCal uses MIDI note
+  numbers. Keep your keyboard's transpose/octave-shift settings unchanged
+  between calibration and playing.
+- This is an early release. There is no undo/redo or individual section removal
+  yet. If routing stops or behaves unexpectedly, disable **Route MIDI** and
+  check your MIDI connections for a feedback loop.
+- Found a problem, especially on Linux or macOS?
+  [Open an issue](https://github.com/SH4DOWSIX/VelCal/issues/new) with your OS,
+  keyboard, DAW, and steps to reproduce it.
 
-The capture tool also writes a versioned `.velcal.json` profile to `profiles/`.
-It contains the original measurements, quality decisions, algorithm settings,
-section alignment, confidence statistics, and all 128 generated lookup tables.
+## Development
 
-## Desktop application
-
-Run `build/velcal_app_artefacts/Debug/VelCal.exe` after building. To add a
-calibration section:
-
-1. Select the physical MIDI input and either white or black keys. Place your
-   straight-edge bar (for example, a piece of wood or a spirit level) across the
-   group of keys you want to measure.
-2. Select **Start section**, then press the same group of keys at least three
-   times. The capture guide targets eight accepted soft, medium, and firm presses
-   and reports which strength is still needed while recording.
-3. Select **Finish section**. VelCal infers the short bar's note range, rejects
-   incomplete or contaminated presses, and rebuilds the profile immediately.
-4. Move the bar with at least two same-colour keys overlapping the previous
-   section and repeat. Select **Save profile** when finished.
-
-For live use, select an output and enable **Route MIDI**. macOS and Linux JUCE
-backends support an application-owned `VelCal Output (virtual)` endpoint, but
-these platforms have not yet been built or physically tested for VelCal.
-
-### Windows MIDI setup
-
-VelCal does not create a virtual MIDI cable on Windows. Create one with
-[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html), or use another
-installed virtual MIDI cable. This carries MIDI messages, not audio.
-
-1. Install and open loopMIDI, then create a port named `VelCal Output` with its
-   **+** button. Keep loopMIDI running while using the port.
-2. Start or restart VelCal after creating the port. Select your physical keyboard
-   as **MIDI input** and the loopMIDI port as **MIDI output**.
-3. In your DAW, select the same loopMIDI port as the instrument track's MIDI input.
-4. Enable **Route MIDI** in VelCal. Use the loopMIDI input rather than also
-   receiving the physical keyboard directly, to avoid duplicate notes. Do not
-   route the DAW's MIDI output back to VelCal's input.
-
-VelCal lists installed Windows MIDI outputs only. It remembers the selected port
-when available; it does not automatically choose an output on first use.
-
-Live routing uses a bounded output queue and stops automatically if it detects an
-abnormal message rate or a backed-up MIDI output. Driver sends happen away from
-the hardware input callback so a slow endpoint cannot hold up incoming MIDI.
-
-The **Per-key calibration** tab contains section capture, the keyboard response
-display, and a manual adjustment for the selected key. The **Global curve** tab
-applies a final keyboard-wide response curve after per-key correction. It includes
-linear, soft, firm, compressed, and wide-dynamics defaults and can save custom
-presets inside the profile.
-
-Both response graphs are directly editable. Select or add a control point with
-the left mouse button, drag it to reshape the response, and remove an interior
-point with the right mouse button. Endpoints remain anchored to MIDI inputs 1 and
-127, and output values are constrained to remain monotonic. The **Smooth** toggle
-switches between monotonic cubic interpolation and straight line segments. MIDI
-output remains quantized to the 127 values defined by the protocol even though
-the editor displays the continuous response envelope.
-
-## Platform direction
-
-The calibration and profile model remain independent of JUCE. The desktop layer
-uses JUCE for its UI and MIDI backends:
-
-- CoreMIDI virtual endpoints on macOS.
-- ALSA sequencer ports on Linux.
-- Selection of an existing virtual cable such as loopMIDI on Windows.
-
-Original measurements are retained in versioned VelCal profiles so correction
-curves can be regenerated when the algorithm improves.
+Want to build or contribute? See the [build guide](docs/BUILDING.md) and
+[architecture overview](docs/architecture.md). The detailed project handoff
+is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Licence
 
