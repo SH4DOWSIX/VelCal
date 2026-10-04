@@ -23,6 +23,11 @@ live short-section capture, profile persistence, and real-time MIDI routing.
 
 ## Short-bar calibration
 
+Use a rigid object with a straight, smooth edge, such as a straight piece of wood
+or a spirit level, as the calibration bar. Place its edge across a group of
+same-colour keys and press them down together, then fully release them between
+presses. Measure white and black keys separately.
+
 The keyboard may be measured in sections when the calibration bar cannot span
 the full keybed. Adjacent sections must overlap by at least two same-colour keys;
 three or four is preferable. Each section still needs soft, medium, and hard
@@ -97,7 +102,9 @@ section alignment, confidence statistics, and all 128 generated lookup tables.
 Run `build/velcal_app_artefacts/Debug/VelCal.exe` after building. To add a
 calibration section:
 
-1. Select the physical MIDI input and either white or black keys.
+1. Select the physical MIDI input and either white or black keys. Place your
+   straight-edge bar (for example, a piece of wood or a spirit level) across the
+   group of keys you want to measure.
 2. Select **Start section**, then press the same group of keys at least three
    times. The capture guide targets eight accepted soft, medium, and firm presses
    and reports which strength is still needed while recording.
