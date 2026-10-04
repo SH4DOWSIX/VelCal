@@ -75,6 +75,12 @@ default branch. Source, tests, build configuration, and documentation are tracke
 builds, dependencies, temporary files, profiles/app preferences, physical captures,
 and third-party reference data remain local and are ignored by Git.
 
+The first public release, [VelCal 0.0.1](https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.1),
+was published on 2026-10-04 from commit
+`30e469c6df8734c4f4d471dfe1d3e9070450d140`. Assets are Windows x64 and universal
+macOS ZIPs, a Linux x64 tar.gz containing an AppImage, and `SHA256SUMS.txt`.
+Only Windows has real keyboard/DAW test evidence; Linux/macOS remain experimental.
+
 Development changes stay local unless the user explicitly requests a GitHub
 update. The initial repository creation/push does not authorize future automatic
 pushes. See `AGENTS.md` for the durable rule.
@@ -334,6 +340,18 @@ left/right inset within the 273px sidebar. The portable Release build and CTest
 and at minimum window size. Native screenshot capture returned blank images, so
 visual confirmation of this change remains with the user.
 
+Release CI verification on 2026-10-04: all three jobs in
+[run 37217137034](https://github.com/SH4DOWSIX/VelCal/actions/runs/37217137034)
+passed app compilation, core tests (1/1 per platform), and portable packaging.
+Linux also passed an Xvfb AppImage startup check; macOS verified both arm64 and
+x86_64 binary slices and its ad-hoc bundle signature. The initial CI run exposed
+a missing explicit `<algorithm>` include in the tests and incorrect `lipo`
+argument ordering; both were fixed before this successful run.
+Downloaded archives were checked for required executables/licences and absence
+of README files or personal profiles/preferences. GitHub's uploaded SHA-256
+digests matched the local release assets before publication. These automated
+checks do not establish Linux/macOS MIDI hardware, DAW, or visual correctness.
+
 ## Known Risks and Limitations
 
 ### Virtual MIDI Endpoint Stall
@@ -396,8 +414,9 @@ user's explicit permission.
 - The curve editor has no keyboard-accessible point editing yet.
 - Portable packaging and GitHub build/test workflows exist; installers and
   trusted publisher signing/notarization do not. macOS uses ad-hoc signing only.
-- The `0.0.1` release is being prepared at the user's request; platform CI results
-  must be checked before publishing. Only Windows has physical test evidence.
+- The published `0.0.1` release has passing platform CI, but only Windows has
+  physical test evidence. Fresh P0 validation and the virtual MIDI stall audit
+  remain open.
 
 ## Prioritized Next Work
 
@@ -460,11 +479,13 @@ Treat failures found here as higher priority than new features.
 1. Review generated and user-data exclusions before user-requested GitHub updates;
    do not automatically push routine development changes.
 2. Keep the full AGPL-3.0 licence and dependency licence notices in packages.
-3. Validate the new three-platform CI and portable packages.
+3. Maintain the passing three-platform CI and inspect each future release's
+   portable packages before publication.
 4. Add trusted publisher signing/notarization when available.
-5. Publish the requested early `0.0.1` release with Windows-only hardware-test
-   status, experimental Linux/macOS status, issue reporting, and security notes.
-   P0 validation and the virtual MIDI stall audit remain open after this release.
+5. Preserve explicit platform testing status, issue reporting, checksums, and
+   unsigned-app security guidance in future release notes. These were included
+   in the published `0.0.1` release; P0 validation and the virtual MIDI stall
+   audit remain open.
 
 ## Source Map
 
@@ -479,6 +500,10 @@ Treat failures found here as higher priority than new features.
 - `tools/windows_capture.cpp`: older Windows console capture/instrumentation tool
 - `tools/analyze_capture.cpp`: offline CSV reprocessing and validation
 - `tests/calibration_tests.cpp`: core regression suite
+- `.github/workflows/portable-builds.yml`: three-platform build/test artifacts
+- `tools/package_unix_portable.sh`: Linux AppImage and universal macOS packages
+- `tools/package_windows_portable.ps1`: Windows portable folder/ZIP packaging
+- `docs/releases/0.0.1.md`: published release notes and security guidance
 - `docs/architecture.md`: concise architectural overview
 - `README.md`: user/build overview
 
