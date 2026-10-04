@@ -1,6 +1,7 @@
 #include "velcal/calibration.hpp"
 #include "velcal/profile.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>

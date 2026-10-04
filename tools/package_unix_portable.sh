@@ -14,7 +14,7 @@ case "$(uname -s)" in
     package="$output/$name"
     mkdir "$package"
     ditto "$build_dir/velcal_app_artefacts/Release/VelCal.app" "$package/VelCal.app"
-    lipo -verify_arch arm64 x86_64 "$package/VelCal.app/Contents/MacOS/VelCal"
+    lipo "$package/VelCal.app/Contents/MacOS/VelCal" -verify_arch arm64 x86_64
     # Ad-hoc signing supports Apple Silicon but provides no developer identity/notarization.
     codesign --force --deep --sign - "$package/VelCal.app"
     codesign --verify --deep --strict "$package/VelCal.app"
