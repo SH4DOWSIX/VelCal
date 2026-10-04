@@ -17,12 +17,24 @@
 - Keep portable behavior intact: profiles and app preferences belong in
   `profiles/` beside the executable, and the MSVC runtime is linked statically.
 - Never bundle personal profiles, preferences, or captures in the package.
-- Package the EXE, licence, and an empty profiles directory. Keep the repository
+- Package the EXE, licence, dependency licence notices, and an empty profiles directory. Keep the repository
   README and setup instructions on GitHub rather than copying them into the ZIP.
 - Use Debug builds only for specific debugging needs; the portable Release is
   the default build to deliver for local use and verification.
 - Keep build instructions in `README.md` and `docs/PLAN.md` consistent with this
   workflow. Building locally does not authorize publication or a GitHub update.
+
+## GitHub portable builds
+
+- `.github/workflows/portable-builds.yml` builds and tests Windows x64, Linux x64,
+  and universal macOS (Intel/Apple Silicon) packages. Workflow runs upload build
+  artifacts; they do not automatically publish releases.
+- The user has authorized tracking `resources/app-icon.png` for these builds.
+- Use `docs/releases/<version>.md` for release notes and publish only after all
+  requested platform jobs pass. Include the Windows-only hardware-testing status
+  until real Linux/macOS validation has been performed.
+- Local storage restrictions still apply to this workstation; hosted runners use
+  their disposable workspace and preinstalled platform toolchains.
 
 ## GitHub updates
 

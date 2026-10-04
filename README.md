@@ -48,9 +48,8 @@ All project dependencies and generated files must remain on the `D:` drive. Do
 not install project tooling or dependencies system-wide on `C:`. The repository's
 `AGENTS.md` records the storage policy for future development sessions.
 
-Before building the desktop app, supply the local icon source at
-`resources/app-icon.png`. This image is intentionally excluded from Git; it is
-embedded into the executable during the build.
+The tracked icon source is `resources/app-icon.png`; it is embedded into the
+executable during the build.
 
 ```powershell
 cmake -S . -B build
@@ -69,7 +68,7 @@ Double-click `build-portable.bat` in the repository root. Requires CMake and Git
 on PATH, plus Visual Studio C++ build tools with a Windows SDK already installed.
 The script builds x64 Release, runs the core tests, and creates a fresh portable
 folder and ZIP under `build/portable/`, containing the EXE, licence, and an empty
-profiles directory. The repository README is not bundled. For a terminal run
+profiles directory, plus dependency licence notices. The repository README is not bundled. For a terminal run
 without the final pause, use `build-portable.bat --no-pause`.
 
 Extract the ZIP into a writable folder and run `VelCal.exe`. Profiles and app
@@ -80,6 +79,20 @@ a Windows virtual MIDI cable such as loopMIDI is still needed for DAW routing.
 
 The separate build tree is `build/windows-portable`; dependencies stay in `.deps`
 and the script directs temporary build files to `.tmp`. Nothing is published.
+
+### GitHub portable builds
+
+The **Portable builds** GitHub Actions workflow builds Windows x64 ZIP, Linux x64
+AppImage (inside a tar.gz), and universal macOS ZIP packages. It runs on pushes,
+pull requests, or manually from the Actions tab, and runs core tests on each OS.
+Download packages from a successful run's artifacts or from a published release.
+Builds do not automatically publish releases.
+
+Only Windows has been tested with real MIDI hardware and a DAW. Linux and macOS
+packages remain experimental; report problems through
+[repository issues](https://github.com/SH4DOWSIX/VelCal/issues/new). See the
+[0.0.1 release notes](docs/releases/0.0.1.md) for package requirements and
+unsigned-app security guidance.
 
 ## Physical capture prototype (Windows)
 

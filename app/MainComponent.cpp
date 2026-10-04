@@ -87,7 +87,12 @@ private:
 juce::File profileDirectory()
 {
 #if VELCAL_PORTABLE
-    return juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+   #if JUCE_LINUX
+    const auto appImage = juce::SystemStats::getEnvironmentVariable("APPIMAGE", {});
+    if (juce::File::isAbsolutePath(appImage))
+        return juce::File(appImage).getParentDirectory().getChildFile("profiles");
+   #endif
+    return juce::File::getSpecialLocation(juce::File::currentApplicationFile)
         .getParentDirectory().getChildFile("profiles");
 #else
     return juce::File(VELCAL_DEFAULT_PROFILE_DIR);

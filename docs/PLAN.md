@@ -62,7 +62,7 @@ calibration pass.
 
 Current versions:
 
-- Application/CMake project version: `0.1.0`
+- Application/CMake project version: `0.0.1`
 - Profile schema: `4`
 - Calibration algorithm: `0.4.0`
 - JUCE: `9.0.3`, pinned under `.deps`
@@ -201,9 +201,8 @@ than compressing all 88 keys.
 Application icons use the user-supplied `resources/app-icon.png`
 unchanged. The source was recovered from the previous build's embedded bytes
 after the original workspace-root file was removed, so rebuilds retain the icon.
-The recovered source PNG is local-only and ignored by Git at the user's request;
-do not include it in a GitHub update without explicit authorization. A source
-checkout without this local asset needs it supplied before building the app.
+The user subsequently authorized tracking the renamed source PNG so GitHub
+hosted runners and fresh source checkouts can build with the icon.
 JUCE generates the Windows EXE icon and macOS bundle ICNS from this source. The
 same image is embedded for the native window icon, including Linux. Linux CMake
 installation also installs the executable, PNG icon, and
@@ -230,7 +229,10 @@ selection is supported only on macOS/Linux; an old Windows virtual-output
 preference leaves the output unselected.
 
 The optional `VELCAL_PORTABLE` build stores profiles and app preferences in
-`profiles/` beside the executable instead of the development workspace. Profile
+`profiles/` beside the Windows executable, Linux AppImage, or macOS `.app` bundle
+instead of the development workspace. AppImages use the `APPIMAGE` environment
+path so data is outside the read-only mount. macOS uses `currentApplicationFile`
+so data is outside the signed bundle. Profile
 chooser defaults use the same directory. Last-profile paths inside that directory
 are saved relatively so they survive moving the portable folder. External profile
 paths remain absolute. Normal development builds keep their existing storage.
@@ -380,7 +382,7 @@ user's explicit permission.
 
 ### Product Gaps
 
-- macOS and Linux have not been built or physically tested.
+- macOS and Linux have not been physically tested with MIDI hardware/DAWs.
 - The newest smart capture guide, curve editor, axis labels, keyboard status
   colours, and `8/8/8` readiness rule need a fresh end-to-end user pass.
 - There is no section manager for reviewing, deleting, or recapturing one bad
@@ -392,9 +394,10 @@ user's explicit permission.
 - Quick/Recommended/Thorough capture modes are not implemented.
 - There is no one-click calibration bypass/A-B validation view.
 - The curve editor has no keyboard-accessible point editing yet.
-- A local Windows portable build script exists; installers, signing, CI, public
-  release automation, and published release binaries do not exist.
-- `LICENSE` contains an SPDX declaration and link, not the full AGPL text.
+- Portable packaging and GitHub build/test workflows exist; installers and
+  trusted publisher signing/notarization do not. macOS uses ad-hoc signing only.
+- The `0.0.1` release is being prepared at the user's request; platform CI results
+  must be checked before publishing. Only Windows has physical test evidence.
 
 ## Prioritized Next Work
 
@@ -456,11 +459,12 @@ Treat failures found here as higher priority than new features.
 
 1. Review generated and user-data exclusions before user-requested GitHub updates;
    do not automatically push routine development changes.
-2. Add the full AGPL-3.0-only licence text.
-3. Add CI for Windows first, then macOS/Linux.
-4. Create reproducible packaging without writing project dependencies to `C:`.
-5. Add versioning/release notes and prepare a first public alpha only after P0
-   hardware validation and the virtual MIDI stall audit.
+2. Keep the full AGPL-3.0 licence and dependency licence notices in packages.
+3. Validate the new three-platform CI and portable packages.
+4. Add trusted publisher signing/notarization when available.
+5. Publish the requested early `0.0.1` release with Windows-only hardware-test
+   status, experimental Linux/macOS status, issue reporting, and security notes.
+   P0 validation and the virtual MIDI stall audit remain open after this release.
 
 ## Source Map
 
@@ -486,12 +490,21 @@ Agents use `.\build-portable.bat --no-pause`. It configures `build/windows-porta
 enables `VELCAL_PORTABLE`, statically links the MSVC runtime, builds the app/core
 tests in Release, runs CTest, and calls `tools/package_windows_portable.ps1`.
 Each successful run creates a new folder and ZIP under `build/portable`, containing
-the EXE, licence, and an empty profiles directory. The repository README and
+the EXE, licence, dependency licence notices, and an empty profiles directory. The repository README and
 setup instructions remain on GitHub and are not bundled. Personal data is never
 copied into the package. Temporary files are directed to `.tmp`; downloaded
 dependencies remain in `.deps`. The script requires existing CMake, Git, Visual
 Studio C++ tools and a Windows SDK; it does not install tools or publish anything.
 Use `build-portable.bat --no-pause` for an unattended terminal run.
+
+GitHub Actions uses `.github/workflows/portable-builds.yml` for Windows x64,
+Linux x64 (Ubuntu 22.04 baseline), and universal macOS (11+ target). Windows uses
+the existing batch workflow with deterministic release package names. Unix jobs
+build/test in `build/ci` and use `tools/package_unix_portable.sh`. Linux packages
+an AppImage with SHA-256-checked linuxdeploy; macOS verifies both CPU slices and
+ad-hoc signs its bundle. Artifacts contain no README or personal data. Builds
+upload artifacts but never automatically publish a release. Release notes live
+in `docs/releases/0.0.1.md`; only Windows has real MIDI/DAW test evidence.
 
 For specific debugging or offline-tool work, the separate Debug build remains
 available. It is not the default build for local app delivery. From

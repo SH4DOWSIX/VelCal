@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VelCal VERSION 0.1.0 LANGUAGES C CXX)
+project(VelCal VERSION 0.0.1 LANGUAGES C CXX)
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/velcal-version.txt" CONTENT "${PROJECT_VERSION}\n")
 
 option(VELCAL_BUILD_TESTS "Build the VelCal core tests" ON)
 option(VELCAL_BUILD_APP "Build the JUCE desktop application" ON)
@@ -105,6 +106,7 @@ if(VELCAL_BUILD_APP)
         JUCE_USE_CURL=0
         VELCAL_DEFAULT_PROFILE_DIR="${CMAKE_SOURCE_DIR}/profiles"
         VELCAL_PORTABLE=$<BOOL:${VELCAL_PORTABLE}>
+        VELCAL_VERSION="${PROJECT_VERSION}"
     )
     target_link_libraries(velcal_app PRIVATE
         velcal_core
