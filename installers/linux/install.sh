@@ -22,10 +22,12 @@ chmod +x "$app/uninstall.sh"
 if [[ "$standalone" == 1 ]]; then
     cp "$payload/VelCal.AppImage" "$app/VelCal.AppImage"
     chmod +x "$app/VelCal.AppImage"
-    ln -sfn "$app/VelCal.AppImage" "$HOME/.local/bin/velcal"
+    cp "$payload/launch.sh" "$app/launch.sh"
+    chmod +x "$app/launch.sh"
+    ln -sfn "$app/launch.sh" "$HOME/.local/bin/velcal"
     mkdir -p "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/256x256/apps"
     cp "$payload/org.velcal.app.png" "$HOME/.local/share/icons/hicolor/256x256/apps/"
-    printf '[Desktop Entry]\nType=Application\nName=VelCal\nExec="%s"\nIcon=org.velcal.app\nTerminal=false\nCategories=AudioVideo;Audio;Midi;\n' "$app/VelCal.AppImage" > "$HOME/.local/share/applications/org.velcal.app.desktop"
+    printf '[Desktop Entry]\nType=Application\nName=VelCal\nExec="%s"\nIcon=org.velcal.app\nTerminal=false\nCategories=AudioVideo;Audio;Midi;\n' "$app/launch.sh" > "$HOME/.local/share/applications/org.velcal.app.desktop"
 fi
 if [[ "$plugin" == 1 ]]; then
     rm -rf "$HOME/.vst3/VelCal.vst3"

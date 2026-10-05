@@ -71,7 +71,11 @@ universal-slice checks and ad-hoc signature verification, then failed packaging:
 `pkgbuild --analyze` returned an empty component list for VST3, while the script
 assumed index 0 existed. Packaging now disables relocation only for actual
 listed bundle components. Run `37373118857` is superseded because it would hit
-the same packaging issue. Final native CI and publication remain outstanding.
+the same packaging issue. A further Linux review found the user-local shortcut
+required FUSE even though CI launched in extraction mode. The installed launcher
+now uses extraction mode automatically, and CI tests the ordinary installed
+command. Run `37373686862` is superseded for this correction. Final native CI
+and publication remain outstanding.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys

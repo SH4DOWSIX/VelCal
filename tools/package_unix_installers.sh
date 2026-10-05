@@ -79,6 +79,7 @@ case "$(uname -s)" in
     cp /usr/share/doc/makeself/copyright "$payload/LICENSES/makeself.txt"
     cp "$appdir/usr/share/icons/hicolor/256x256/apps/org.velcal.app.png" "$payload/"
     cp "$workspace/installers/linux/install.sh" "$payload/install.sh"
+    cp "$workspace/installers/linux/launch.sh" "$payload/launch.sh"
     chmod +x "$payload/install.sh" "$payload/VelCal.AppImage"
     makeself --nox11 "$payload" "$output/VelCal-$version-Linux-x64-Install.run" "VelCal $version" ./install.sh
     ;;

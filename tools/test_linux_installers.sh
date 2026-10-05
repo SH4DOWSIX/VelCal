@@ -23,7 +23,7 @@ test ! -d "$HOME/.vst3/VelCal.vst3"
 bash build/installers/VelCal-*-Linux-x64-Install.run -- --vst3-only
 test -d "$HOME/.vst3/VelCal.vst3"
 set +e
-VELCAL_DATA_DIR="$workspace/.tmp/run-user-data" xvfb-run -a bash tools/run_linux_gui_check.sh timeout 8s "$HOME/.local/lib/velcal/VelCal.AppImage" --appimage-extract-and-run
+VELCAL_DATA_DIR="$workspace/.tmp/run-user-data" xvfb-run -a bash tools/run_linux_gui_check.sh timeout 8s "$HOME/.local/bin/velcal"
 result=$?
 set -e
 test "$result" -eq 124

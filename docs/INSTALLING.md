@@ -37,6 +37,8 @@ and `~/.local/bin/velcal`; VST3 goes into `~/.vst3`. Optional components:
 Uninstall with `bash ~/.local/lib/velcal/uninstall.sh --uninstall`.
 Do not mix both installers. Linux x64 needs glibc 2.35+; the plugin also requires
 your distribution's normal desktop/audio libraries.
+The installed launcher extracts the internal AppImage at runtime, so it does
+not require a working FUSE mount.
 
 ## macOS
 
