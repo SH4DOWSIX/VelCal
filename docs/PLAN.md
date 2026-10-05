@@ -85,6 +85,14 @@ Windows review found remembered custom directories were read from the default
 now explicitly reads the 64-bit view while preserving `/D` overrides, with a
 two-install upgrade-location regression in native CI. Windows will be validated
 separately; macOS run `37374044222` continues unchanged.
+That macOS run passed all four suites again but exposed the exact packaging
+schema variation: a plugin component was listed without `BundleIsRelocatable`.
+The loop now sets or adds the optional boolean rather than assuming it exists.
+Native macOS CI preserves only tested bundles/version/licences as an internal
+artifact before packaging. Optional packaging-only retries verify identical
+CMake/C++/test/resource inputs before restoring those binaries. This avoids
+recompiling unchanged code for further installer fixes; it is not portable
+distribution. A fresh macOS-only validation remains required for this fix.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys

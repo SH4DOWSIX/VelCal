@@ -35,7 +35,8 @@ case "$(uname -s)" in
         pkgbuild --analyze --root "$stage/$component" "$stage/$component.plist"
         index=0
         while /usr/libexec/PlistBuddy -c "Print :$index:RootRelativeBundlePath" "$stage/$component.plist" >/dev/null 2>&1; do
-            /usr/libexec/PlistBuddy -c "Set :$index:BundleIsRelocatable false" "$stage/$component.plist"
+            /usr/libexec/PlistBuddy -c "Set :$index:BundleIsRelocatable false" "$stage/$component.plist" 2>/dev/null \
+                || /usr/libexec/PlistBuddy -c "Add :$index:BundleIsRelocatable bool false" "$stage/$component.plist"
             index=$((index + 1))
         done
         pkgbuild --root "$stage/$component" --component-plist "$stage/$component.plist" --identifier "org.velcal.$component" --version "$version" --install-location / "$stage/components/$component.pkg"

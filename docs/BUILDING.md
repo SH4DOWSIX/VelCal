@@ -4,6 +4,10 @@ Builds and publication require explicit user authorization. Source pushes do not
 trigger builds; the installer workflow is manual-only.
 Its platform selector defaults to all; platform-specific packaging fixes can
 be validated individually without rebuilding unchanged platform payloads.
+For packaging-only macOS retries, `macos_reuse_run` can restore the internal
+tested-binary artifact from a prior native run. The helper rejects changed
+CMake/C++/test/resource inputs; changed compilation inputs require a full build.
+These internal artifacts are never published as portable downloads.
 
 ## Windows Release
 

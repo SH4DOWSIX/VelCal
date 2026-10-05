@@ -12,9 +12,14 @@ on:
           - windows
           - linux
           - macos
+      macos_reuse_run:
+        description: Reuse tested macOS binaries from a run ID (packaging-only retry)
+        type: string
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   windows:
@@ -103,15 +108,40 @@ jobs:
       TMPDIR: ${{ github.workspace }}/.tmp
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Restore tested packaging inputs
+        if: inputs.macos_reuse_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_RUN: ${{ inputs.macos_reuse_run }}
+        run: bash tools/restore_macos_package_inputs.sh "$REUSE_RUN"
       - name: Configure
+        if: inputs.macos_reuse_run == ''
         run: |
           mkdir -p .tmp
           cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DVELCAL_INSTALLED=ON \
             '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
       - name: Build
+        if: inputs.macos_reuse_run == ''
         run: cmake --build build/ci --target velcal_app velcal_plugin_VST3 velcal_au_AU velcal_core_tests velcal_app_tests velcal_plugin_tests velcal_au_tests --parallel 2
       - name: Test
+        if: inputs.macos_reuse_run == ''
         run: ctest --test-dir build/ci --output-on-failure
+      - name: Preserve tested packaging inputs
+        run: |
+          mkdir -p .tmp
+          tar -czf .tmp/macos-package-inputs.tar.gz \
+            build/ci/velcal-version.txt \
+            build/ci/velcal_app_artefacts/Release/VelCal.app \
+            build/ci/velcal_plugin_artefacts/Release/VST3/VelCal.vst3 \
+            build/ci/velcal_au_artefacts/Release/AU/VelCal.component \
+            .deps/juce-src/LICENSE.md .deps/nlohmann_json-src/LICENSE.MIT \
+            .deps/juce-src/modules/juce_audio_processors_headless/format_types/VST3_SDK/LICENSE.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-package-inputs
+          path: .tmp/macos-package-inputs.tar.gz
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Package
         run: bash tools/package_unix_installers.sh build/ci
       - name: Install and validate AU
