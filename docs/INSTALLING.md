@@ -3,6 +3,8 @@
 Close DAWs and VelCal before installing or updating. Download only from
 [VelCal releases](https://github.com/SH4DOWSIX/VelCal/releases).
 Installers never include personal calibration data.
+Remove older manually copied VelCal plugins from additional DAW scan folders
+to avoid duplicate versions, then rescan after installation.
 
 ## Windows
 
@@ -92,7 +94,8 @@ User data is preserved on uninstall and stored in:
 - macOS: `~/Library/Application Support/VelCal/profiles`
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/VelCal/profiles`
 
-For an older portable copy, open its profile JSON files from their old folder,
-then save in the new location. Back up important profiles; installers do not
+For an older portable copy, back up its profiles and copy the chosen JSON files
+into the new profile directory. You can also open them in their original folder,
+but Save updates that original file rather than migrating it. Installers do not
 migrate or delete old personal files. Standalone and plugins share profile
 files, but each plugin instance has independent DAW project state.

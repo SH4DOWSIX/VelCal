@@ -129,7 +129,7 @@ between a smooth curve and straight lines between points. You can save custom
 global presets inside your profile.
 
 Use **Save profile** after calibration or editing. Changes are not saved
-automatically, and there is currently no unsaved-change warning when closing.
+automatically; standalone warns before closing or replacing an edited profile.
 Installed builds keep profiles/preferences in writable per-user storage and
 preserve them on uninstall. See [profile locations](docs/INSTALLING.md#profiles-and-updates).
 Back up important profiles. Plugin project state includes completed profiles

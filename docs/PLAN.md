@@ -61,38 +61,30 @@ user data uses `app/DataPaths.hpp`, with `VELCAL_DATA_DIR` for isolated tests.
 Historical portable milestones below describe earlier work, not the active
 build workflow. Windows Studio One live correction and project recall are now
 user-confirmed. Local installer Release passed all three suites on 2026-10-05.
-The first installer CI run (`37370424953`, commit `455aeae`) passed Windows and
-Linux build/core/app/plugin suites and installation/startup/uninstall checks.
-macOS universal compilation is still in progress. Final packaging adds NSIS
-and makeself notices, separates Linux app files under `~/.local/lib/velcal`
-from profile data, and explicitly tests installed macOS startup for both CPU
-architectures. The first macOS build passed all four core/app/VST3/AU suites,
-universal-slice checks and ad-hoc signature verification, then failed packaging:
-`pkgbuild --analyze` returned an empty component list for VST3, while the script
-assumed index 0 existed. Packaging now disables relocation only for actual
-listed bundle components. Run `37373118857` is superseded because it would hit
-the same packaging issue. A further Linux review found the user-local shortcut
-required FUSE even though CI launched in extraction mode. The installed launcher
-now uses extraction mode automatically, and CI tests the ordinary installed
-command. Run `37373686862` is superseded for this correction. Final native CI
-and publication remain outstanding.
-Final Linux payload review also identified bundled Brotli/libpng libraries;
-their distro copyright notices are now included alongside ALSA and makeself.
-The manual workflow has an all/default or single-platform selector. Linux-only
-run `37375028280` passed all tests and installer checks with the final notices.
-Windows review found remembered custom directories were read from the default
-32-bit registry view despite being written to the 64-bit view. Initialization
-now explicitly reads the 64-bit view while preserving `/D` overrides, with a
-two-install upgrade-location regression in native CI. Windows will be validated
-separately; macOS run `37374044222` continues unchanged.
-That macOS run passed all four suites again but exposed the exact packaging
-schema variation: a plugin component was listed without `BundleIsRelocatable`.
-The loop now sets or adds the optional boolean rather than assuming it exists.
+Final Windows run `37378091541` passed all three test suites, installation,
+standalone startup, custom-directory upgrade, and uninstall/data preservation.
+Final Linux run `37375028280` passed all three suites plus DEB and user-local
+RUN install/startup/uninstall checks. The RUN launcher uses extraction mode
+automatically instead of depending on FUSE; app files live under
+`~/.local/lib/velcal`, separate from profiles. Bundled dependency notices include
+NSIS, ALSA, Brotli, libpng and makeself as applicable.
+Earlier macOS runs passed all four core/app/VST3/AU suites, universal-slice
+checks and ad-hoc signature verification, but failed packaging. The precise
+`pkgbuild --analyze` variation was a plugin component listed without the optional
+`BundleIsRelocatable` field. Packaging now sets or adds that boolean for actual
+listed components. Final macOS run `37379958486` passed all four suites, universal
+binary/ad-hoc signature checks, PKG installation, AU validation and standalone
+startup for arm64 and x86_64, and uninstall with profiles preserved.
+All three platforms have passing native release verification. Their compilation
+inputs are identical; the platform-specific installer fixes were validated in
+separate runs. Release notes link to the exact passing jobs. Publication is the
+remaining release step; real Linux/macOS/Logic testing is still outstanding.
 Native macOS CI preserves only tested bundles/version/licences as an internal
 artifact before packaging. Optional packaging-only retries verify identical
 CMake/C++/test/resource inputs before restoring those binaries. This avoids
 recompiling unchanged code for further installer fixes; it is not portable
-distribution. A fresh macOS-only validation remains required for this fix.
+distribution. Workflows remain manual-only with all/default or platform-specific
+selection; source pushes do not start builds.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys
@@ -594,8 +586,9 @@ user's explicit permission.
 - Quick/Recommended/Thorough capture modes are not implemented.
 - There is no one-click calibration bypass/A-B validation view.
 - The curve editor has no keyboard-accessible point editing yet.
-- Portable packaging and GitHub build/test workflows exist; installers and
-  trusted publisher signing/notarization do not. macOS uses ad-hoc signing only.
+- Installer packaging and manual native GitHub build/test workflows exist.
+  Trusted publisher signing/notarization is not provided; macOS uses ad-hoc
+  signing only, and paid Apple signing is explicitly outside this release.
 - The published `0.0.1` release has passing platform CI, but only Windows has
   physical test evidence. Fresh P0 validation and the virtual MIDI stall audit
   remain open.
@@ -609,8 +602,8 @@ monitoring/fixing failures, and publication after passing checks on 2026-10-05.
 Portable distribution is retired by request; no paid Apple signing/notarization.
 
 1. Windows installer Release and core/app/plugin suites passed locally (3/3).
-2. Complete review, native CI, installer smoke tests, and macOS AU validation.
-3. Inspect artifacts and publish 0.0.2 only after all platform jobs pass.
+2. All native tests and installer checks passed, including both AU architectures.
+3. Publish verified 0.0.2 installers and checksums; no portable assets.
 4. Obtain real Linux/macOS/Logic testing; CI is not hardware/host evidence.
 5. Continue full Windows calibration/editor/pedal/multiple-instance host checks.
 
