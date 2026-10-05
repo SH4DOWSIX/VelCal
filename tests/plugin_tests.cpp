@@ -4,6 +4,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 
 struct MainComponentTestAccess {
@@ -22,6 +23,16 @@ struct MainComponentTestAccess {
     static void begin(MainComponent& component) { component.beginSectionCapture(); }
     static void finish(MainComponent& component) { component.finishSectionCapture(); }
     static std::size_t presses(const MainComponent& component) { return component.profile->presses.size(); }
+    static void load(MainComponent& component, const juce::File& file) { component.loadProfile(file); }
+    static juce::String displayedName(const MainComponent& component) { return component.profileBox.getText(); }
+    static int selectedProfile(const MainComponent& component) { return component.profileBox.getSelectedId(); }
+    static void newProfileWithHiddenDevice(MainComponent& component)
+    {
+        component.midiInputs.add({"LM - Keysight Input", "test-virtual-input"});
+        component.midiInputBox.addItem("LM - Keysight Input", 1);
+        component.midiInputBox.setSelectedId(1, juce::dontSendNotification);
+        component.replaceWithNewProfile();
+    }
 };
 
 namespace {
@@ -90,6 +101,84 @@ void processingAndRecall()
         MainComponentTestAccess::sync(editor);
         expect(MainComponentTestAccess::adjustment(editor) == 12, "open editor follows host recall");
     }
+}
+
+void firstRunAndExternalProfiles()
+{
+    const auto previousRoot = juce::SystemStats::getEnvironmentVariable("VELCAL_DATA_DIR", {});
+    if (!juce::File::isAbsolutePath(previousRoot)) {
+        expect(false, "profile tests require an isolated absolute data root");
+        return;
+    }
+    const auto root = juce::File(previousRoot).getChildFile("profile-test-" + juce::Uuid().toString());
+    const auto setDataRoot = [](const juce::String& value) {
+       #if JUCE_WINDOWS
+        return _putenv_s("VELCAL_DATA_DIR", value.toRawUTF8());
+       #else
+        return setenv("VELCAL_DATA_DIR", value.toRawUTF8(), 1);
+       #endif
+    };
+    expect(setDataRoot(root.getFullPathName()) == 0, "test data root can be selected");
+    const auto profiles = root.getChildFile("profiles");
+    expect(!profiles.exists(), "first-run test starts without a profile folder");
+    {
+        MainComponent standalone;
+        expect(profiles.isDirectory(), "standalone creates its profile folder before saving");
+    }
+    expect(profiles.deleteFile(), "empty standalone profile folder can be removed");
+    PluginState state;
+    {
+        MainComponent editor(&state);
+        expect(profiles.isDirectory(), "plugin creates its profile folder without standalone or saving");
+        expect(MainComponentTestAccess::displayedName(editor) == "New calibration",
+            "initial plugin profile has a neutral name");
+        MainComponentTestAccess::newProfileWithHiddenDevice(editor);
+        const auto fresh = state.snapshot();
+        expect(fresh.profile->profileName == "New calibration"
+                && fresh.profile->inputDevice.name == "DAW MIDI"
+                && fresh.profile->inputDevice.endpointId.empty(),
+            "new plugin profile never inherits a hidden physical MIDI device");
+
+        velcal::CalibrationProfile imported;
+        imported.profileName = "Imported calibration";
+        imported.noteAdjustments[60] = 9;
+        imported.generated = velcal::calibrate({});
+        const auto external = root.getChildFile("old-file-name.velcal.json");
+        velcal::saveProfile(imported, std::filesystem::u8path(external.getFullPathName().toStdString()));
+        bool pathConsistent = true;
+        state.onChange = [&] {
+            const auto snapshot = state.snapshot();
+            if (snapshot.profile->profileName == imported.profileName)
+                pathConsistent = pathConsistent && snapshot.profileFile == external;
+        };
+        MainComponentTestAccess::load(editor, external);
+        expect(MainComponentTestAccess::displayedName(editor) == "Imported calibration"
+                && MainComponentTestAccess::selectedProfile(editor) != 0,
+            "external profile displays its saved name as a selected entry");
+        expect(MainComponentTestAccess::adjustment(editor) == 9 && pathConsistent,
+            "external profile settings and path publish together");
+        expect(!profiles.getChildFile(external.getFileName()).exists(),
+            "opening an external profile does not require moving or copying it");
+        state.onChange = nullptr;
+    }
+    PluginState recalled;
+    expect(recalled.restore(state.serialize()), "external profile survives DAW project recall");
+    {
+        MainComponent editor(&recalled);
+        expect(MainComponentTestAccess::displayedName(editor) == "Imported calibration"
+                && MainComponentTestAccess::adjustment(editor) == 9,
+            "reopened plugin keeps the external profile name and settings");
+        velcal::CalibrationProfile library;
+        library.profileName = "Library calibration";
+        library.generated = velcal::calibrate({});
+        const auto file = profiles.getChildFile("different-file-name.velcal.json");
+        velcal::saveProfile(library, std::filesystem::u8path(file.getFullPathName().toStdString()));
+        MainComponentTestAccess::load(editor, file);
+        expect(MainComponentTestAccess::displayedName(editor) == "Library calibration",
+            "library and external profiles both display the saved profile name");
+    }
+    expect(setDataRoot(previousRoot) == 0, "original test data root is restored");
+    expect(root.deleteRecursively(), "isolated profile test files are removed");
 }
 
 void calibrationUsesRawNotesAndSampleClock()
@@ -224,6 +313,7 @@ int main()
     if (juce::File::isAbsolutePath(dataRoot))
         expect(velcalProfileDirectory() == juce::File(dataRoot).getChildFile("profiles"),
             "installed data override uses the isolated profile directory");
+    firstRunAndExternalProfiles();
     processingAndRecall();
     calibrationUsesRawNotesAndSampleClock();
     calibrationWorkflowAndOverflow();

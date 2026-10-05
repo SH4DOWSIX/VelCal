@@ -18,7 +18,8 @@ PluginState::PluginState()
 {
     midi.enableHostMode();
     velcal::CalibrationProfile profile;
-    profile.profileName = "DAW MIDI calibration";
+    profile.profileName = "New calibration";
+    profile.inputDevice.name = "DAW MIDI";
     profile.generated = velcal::calibrate({});
     current.profile = std::move(profile);
 }

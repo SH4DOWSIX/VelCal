@@ -300,6 +300,8 @@ void unsavedChangesRequireConfirmation()
     MainComponent component;
     MainComponentTestAccess::newProfile(component);
     bool closed = false;
+    expect(MainComponentTestAccess::name(component) == "New calibration",
+        "new standalone profiles have a neutral name rather than a MIDI port name");
     component.requestClose([&closed] { closed = true; });
     expect(closed, "an unchanged profile closes without a prompt");
     MainComponentTestAccess::editTrim(component);

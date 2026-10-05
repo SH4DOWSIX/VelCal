@@ -53,6 +53,20 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Post-release source fixes (2026-10-05): the user reported the installed profile
+folder was absent until standalone saved, external profile names did not update
+in the DAW, and new profiles inherited a virtual MIDI input name. Opening either
+UI now creates the profile folder. The active external file is included in the
+profile selector, and active entries use the saved profile name consistently
+inside/outside the folder. Profile loading publishes its new path together with
+its settings. New profiles use `New calibration`; plugin device metadata is
+`DAW MIDI`, never a hidden physical endpoint. Existing saved names are preserved.
+Regression tests were added for folder creation, external/library naming,
+plugin recall, and neutral new-profile names. These changes are source-only:
+no builds or test execution were authorized, and published 0.0.2 installers are
+unchanged. Compile and run the updated suites in the next explicitly authorized
+build before delivering updated installers.
+
 Current release `0.0.2` is installer-first: Windows Setup, Linux DEB/user-local RUN,
 and universal macOS PKG. VST3 is an instrument-style MIDI processor on all three;
 AU is a separate macOS MIDI effect for Logic. Full calibration/editing features
@@ -130,9 +144,8 @@ pushes. See `AGENTS.md` for the durable rule.
 
 Local and GitHub builds also require an explicit build request. Changing,
 testing, committing, or pushing source does not by itself authorize a build.
-The portable workflow is manual-only (`workflow_dispatch`), with no push or
-pull-request triggers. Until this workflow change is pushed, source-only pushes
-must use `[skip ci]` to avoid the remote's existing automatic build triggers.
+The installer workflow is manual-only (`workflow_dispatch`), with no push or
+pull-request triggers. Source-only pushes do not start builds.
 
 ## Implemented Behavior
 

@@ -435,6 +435,7 @@ MainComponent::MainComponent(PluginState* plugin)
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
+    const auto profileDirectoryResult = profileDirectory().createDirectory();
     if (!pluginState) {
         refreshMidiInputs();
         refreshMidiOutputs();
@@ -459,6 +460,9 @@ MainComponent::MainComponent(PluginState* plugin)
         updateLabels();
     setActiveTab(false);
     updateCaptureControls();
+    if (profileDirectoryResult.failed())
+        statusLabel.setText("Could not create profile folder: " + profileDirectoryResult.getErrorMessage(),
+            juce::dontSendNotification);
 }
 
 MainComponent::~MainComponent()
@@ -629,6 +633,10 @@ void MainComponent::refreshProfileList()
         profileFiles.add(file);
         profileBox.addItem(profileDisplayName(file), profileComboBaseId + profileFiles.size() - 1);
     }
+    if (profileFile.existsAsFile() && !profileFiles.contains(profileFile)) {
+        profileFiles.add(profileFile);
+        profileBox.addItem(profileDisplayName(profileFile), profileComboBaseId + profileFiles.size() - 1);
+    }
 
     selectProfileInList(profileFile);
     deleteProfileButton.setEnabled(profileFile != juce::File{} && profileFile.existsAsFile());
@@ -645,8 +653,10 @@ void MainComponent::selectProfileInList(const juce::File& file)
         }
     }
     if (selectedId != 0) {
+        const auto name = profile && !profile->profileName.empty()
+            ? juce::String(profile->profileName) : profileDisplayName(file);
         profileBox.changeItemText(selectedId,
-            profileDisplayName(file) + (profileDirty ? " *" : ""));
+            name + (profileDirty ? " *" : ""));
         profileBox.setSelectedId(selectedId, juce::dontSendNotification);
     }
     else if (profile)
@@ -899,13 +909,14 @@ void MainComponent::finishSectionCapture()
     if (!profile) {
         profile.emplace();
         const auto inputIndex = midiInputBox.getSelectedId() - 1;
-        const auto deviceName = juce::isPositiveAndBelow(inputIndex, midiInputs.size())
+        const auto deviceName = pluginState ? juce::String("DAW MIDI")
+            : juce::isPositiveAndBelow(inputIndex, midiInputs.size())
             ? midiInputs[inputIndex].name
             : juce::String("MIDI keyboard");
-        profile->profileName = (deviceName + " calibration").toStdString();
+        profile->profileName = "New calibration";
         profile->createdUtc = juce::Time::getCurrentTime().toISO8601(true).toStdString();
         profile->inputDevice.name = deviceName.toStdString();
-        if (juce::isPositiveAndBelow(inputIndex, midiInputs.size()))
+        if (!pluginState && juce::isPositiveAndBelow(inputIndex, midiInputs.size()))
             profile->inputDevice.endpointId = midiInputs[inputIndex].identifier.toStdString();
     }
 
@@ -1022,6 +1033,7 @@ void MainComponent::loadProfileConfirmed(const juce::File& file)
 {
     try {
         profile = velcal::loadProfile(juceFilePath(file));
+        profileFile = file;
         profileDirty = false;
         if (midiEngine.isCapturing())
             midiEngine.cancelCapture();
@@ -1036,7 +1048,6 @@ void MainComponent::loadProfileConfirmed(const juce::File& file)
         refreshCurvePresets();
         updateEditingControls();
         updateEffectiveMaps();
-        profileFile = file;
         refreshProfileList();
         saveAppState();
     } catch (const std::exception& error) {
@@ -1164,13 +1175,14 @@ void MainComponent::replaceWithNewProfile()
 
     velcal::CalibrationProfile newProfile;
     const auto inputIndex = midiInputBox.getSelectedId() - 1;
-    const auto deviceName = juce::isPositiveAndBelow(inputIndex, midiInputs.size())
+    const auto deviceName = pluginState ? juce::String("DAW MIDI")
+        : juce::isPositiveAndBelow(inputIndex, midiInputs.size())
         ? midiInputs[inputIndex].name
         : juce::String("MIDI keyboard");
-    newProfile.profileName = (deviceName + " calibration").toStdString();
+    newProfile.profileName = "New calibration";
     newProfile.createdUtc = juce::Time::getCurrentTime().toISO8601(true).toStdString();
     newProfile.inputDevice.name = deviceName.toStdString();
-    if (juce::isPositiveAndBelow(inputIndex, midiInputs.size()))
+    if (!pluginState && juce::isPositiveAndBelow(inputIndex, midiInputs.size()))
         newProfile.inputDevice.endpointId = midiInputs[inputIndex].identifier.toStdString();
     newProfile.generated = velcal::calibrate(newProfile.presses, newProfile.settings);
 

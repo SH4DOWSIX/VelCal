@@ -99,3 +99,8 @@ into the new profile directory. You can also open them in their original folder,
 but Save updates that original file rather than migrating it. Installers do not
 migrate or delete old personal files. Standalone and plugins share profile
 files, but each plugin instance has independent DAW project state.
+
+The source after 0.0.2 creates this folder when either UI opens and displays the
+saved name of a loaded profile consistently, including files outside the folder.
+New profiles are named `New calibration`, not after a MIDI device. These fixes
+are not included in the published 0.0.2 installers; an updated build is pending.
