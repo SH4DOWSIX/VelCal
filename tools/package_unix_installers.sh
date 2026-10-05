@@ -76,6 +76,8 @@ case "$(uname -s)" in
     cp "$stage/LICENSE" "$payload/"
     cp -R "$stage/LICENSES" "$payload/"
     cp /usr/share/doc/libasound2/copyright "$payload/LICENSES/ALSA.txt"
+    cp /usr/share/doc/libbrotli1/copyright "$payload/LICENSES/Brotli.txt"
+    cp /usr/share/doc/libpng16-16/copyright "$payload/LICENSES/libpng.txt"
     cp /usr/share/doc/makeself/copyright "$payload/LICENSES/makeself.txt"
     cp "$appdir/usr/share/icons/hicolor/256x256/apps/org.velcal.app.png" "$payload/"
     cp "$workspace/installers/linux/install.sh" "$payload/install.sh"

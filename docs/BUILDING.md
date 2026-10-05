@@ -2,6 +2,8 @@
 
 Builds and publication require explicit user authorization. Source pushes do not
 trigger builds; the installer workflow is manual-only.
+Its platform selector defaults to all; platform-specific packaging fixes can
+be validated individually without rebuilding unchanged platform payloads.
 
 ## Windows Release
 

@@ -2,12 +2,23 @@ name: Installer builds
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        default: all
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
 
 permissions:
   contents: read
 
 jobs:
   windows:
+    if: inputs.platform == 'all' || inputs.platform == 'windows'
     name: Windows x64
     runs-on: windows-2022
     timeout-minutes: 45
@@ -47,6 +58,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
     name: Linux x64
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -79,6 +91,7 @@ jobs:
           if-no-files-found: error
 
   macos:
+    if: inputs.platform == 'all' || inputs.platform == 'macos'
     name: macOS universal
     runs-on: macos-14
     timeout-minutes: 60
