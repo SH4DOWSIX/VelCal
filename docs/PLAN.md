@@ -66,7 +66,12 @@ Linux build/core/app/plugin suites and installation/startup/uninstall checks.
 macOS universal compilation is still in progress. Final packaging adds NSIS
 and makeself notices, separates Linux app files under `~/.local/lib/velcal`
 from profile data, and explicitly tests installed macOS startup for both CPU
-architectures. The final native CI pass and publication remain outstanding.
+architectures. The first macOS build passed all four core/app/VST3/AU suites,
+universal-slice checks and ad-hoc signature verification, then failed packaging:
+`pkgbuild --analyze` returned an empty component list for VST3, while the script
+assumed index 0 existed. Packaging now disables relocation only for actual
+listed bundle components. Run `37373118857` is superseded because it would hit
+the same packaging issue. Final native CI and publication remain outstanding.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys

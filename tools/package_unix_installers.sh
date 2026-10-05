@@ -33,7 +33,11 @@ case "$(uname -s)" in
     cp "$stage/LICENSE" "$stage/resources/LICENSE.txt"
     for component in app vst3 au; do
         pkgbuild --analyze --root "$stage/$component" "$stage/$component.plist"
-        /usr/libexec/PlistBuddy -c 'Set :0:BundleIsRelocatable false' "$stage/$component.plist"
+        index=0
+        while /usr/libexec/PlistBuddy -c "Print :$index:RootRelativeBundlePath" "$stage/$component.plist" >/dev/null 2>&1; do
+            /usr/libexec/PlistBuddy -c "Set :$index:BundleIsRelocatable false" "$stage/$component.plist"
+            index=$((index + 1))
+        done
         pkgbuild --root "$stage/$component" --component-plist "$stage/$component.plist" --identifier "org.velcal.$component" --version "$version" --install-location / "$stage/components/$component.pkg"
     done
     pkgbuild --root "$stage/shared" --identifier org.velcal.shared --version "$version" --install-location / "$stage/components/shared.pkg"
