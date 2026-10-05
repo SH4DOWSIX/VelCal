@@ -47,5 +47,8 @@ struct CalibrationProfile {
 
 void saveProfile(const CalibrationProfile& profile, const std::filesystem::path& path);
 CalibrationProfile loadProfile(const std::filesystem::path& path);
+std::string serializeProfile(const CalibrationProfile& profile);
+CalibrationProfile deserializeProfile(const std::string& data);
+std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile);
 
 } // namespace velcal

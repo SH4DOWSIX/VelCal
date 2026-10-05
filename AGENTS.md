@@ -13,23 +13,23 @@
 - Run builds only when the user explicitly requests a build. Requests to change,
   fix, test, commit, or push code do not by themselves authorize a build, locally
   or on GitHub. Permission for one build does not authorize future builds.
-- Use `build-portable.bat` in the workspace root as the standard Windows build
-  workflow. For agent/terminal runs, use `.\build-portable.bat --no-pause`.
-- This builds Windows x64 Release in `build/windows-portable`, runs the core
-  tests, and creates a new portable folder and ZIP under `build/portable`.
-- Keep portable behavior intact: profiles and app preferences belong in
-  `profiles/` beside the executable, and the MSVC runtime is linked statically.
+- Use `build-installers.bat` as the standard Windows build workflow.
+  For agent/terminal runs, use `.\build-installers.bat --no-pause`.
+- This builds Windows x64 Release in `build/windows-installer`, runs core,
+  app, and plugin tests, and creates a setup EXE under `build/installers`.
+- Installed profiles/preferences use writable per-user application data.
+  The MSVC runtime is linked statically. Preserve user data on uninstall.
 - Never bundle personal profiles, preferences, or captures in the package.
-- Package the EXE, licence, dependency licence notices, and an empty profiles directory. Keep the repository
-  README and setup instructions on GitHub rather than copying them into the ZIP.
-- Use Debug builds only for specific debugging needs; the portable Release is
+- Package standalone, plugins, licence, and dependency licence notices.
+  Keep setup instructions on GitHub; do not ship portable packages.
+- Use Debug builds only for specific debugging needs; the installer Release is
   the default build to deliver for local use and verification.
 - Keep build instructions in `docs/BUILDING.md` and `docs/PLAN.md` consistent with this
   workflow. Building locally does not authorize publication or a GitHub update.
 
-## GitHub portable builds
+## GitHub installer builds
 
-- `.github/workflows/portable-builds.yml` builds and tests Windows x64, Linux x64,
+- `.github/workflows/installer-builds.yml` builds and tests Windows x64, Linux x64,
   and universal macOS (Intel/Apple Silicon) packages. Workflow runs upload build
   artifacts; they do not automatically publish releases.
 - Keep this workflow manual-only (`workflow_dispatch`); do not enable automatic

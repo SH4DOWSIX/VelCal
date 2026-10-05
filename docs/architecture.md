@@ -50,7 +50,42 @@ difference is mathematically indistinguishable from a harder or softer press.
 - `velcal_core`: calibration types, analysis, lookup generation, validation.
 - `MidiEngine`: JUCE input lifecycle, capture buffering, and real-time routing.
 - `velcal_app`: JUCE desktop capture, profile, inspection, and routing workflow.
-- `velcal_plugin`: optional later VST3/AU/LV2 targets.
+- `velcal_plugin`: JUCE VST3 MIDI-processing instrument using the same calibration/editing UI.
+- `PluginState`: per-instance profile snapshots and self-contained DAW state.
 
 The core must not expose JUCE types. This keeps tests fast and prevents UI or
 device-lifecycle concerns from leaking into the calibration algorithm.
+
+## VST3 Host Path
+
+Installed releases also build a separate AU MIDI-effect target on macOS. It uses
+the same processor/state/editor with no audio buses and runs in Logic's MIDI FX
+slot before the instrument. VST3 retains its silent instrument presentation.
+`DataPaths.hpp` selects writable per-user storage; project state remains
+independent per plugin instance. Installers never bundle personal profiles.
+
+The host supplies MIDI blocks directly to `MidiEngine::processHostMidi`.
+The plugin declares an instrument category with no audio input and a default
+stereo audio output (mono also supported). Every processed or bypassed audio
+block is cleared to silence. Corrected MIDI goes to the host's MIDI output bus;
+the user routes it to the target instrument. Bypass preserves original MIDI.
+This follows VelPro's documented instrument/silent-audio approach to host
+compatibility. It does not put the target instrument inside VelCal.
+The plugin changes only nonzero Note On velocity bytes, preserving event
+ordering, channels, and sample offsets. Other messages remain unchanged in
+the JUCE MIDI buffer; delivery to instruments also depends on the VST3 wrapper
+and host's supported event types. It opens no physical or virtual MIDI devices.
+
+The audio callback tries to copy a published lookup bank without waiting for
+UI edits. Raw capture notes enter a preallocated single-producer/single-consumer
+FIFO, with sample-based timestamps; the UI drains and analyses them. Overflow
+stops capture and reports that the section needs restarting. Calibration fitting,
+JSON, file access, and dialogs run outside the audio callback.
+
+The processor owns the MIDI engine and published profile for its full lifetime.
+Editors can close and reopen without dropping maps, unsaved edits, or ongoing
+capture. Host state includes the full profile, file association, dirty flag, and
+key group, but excludes unfinished captures and MIDI device preferences.
+Revision checks prevent a stale editor publishing over a newly restored project.
+Shared `effectiveMaps` composes automatic/manual per-key maps, trim, and global
+curve for both standalone and plugin. Profile schema remains 4.

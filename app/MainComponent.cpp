@@ -1,4 +1,5 @@
 #include "MainComponent.hpp"
+#include "DataPaths.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -84,24 +85,14 @@ private:
     juce::TextButton cancel{"Cancel"};
 };
 
-juce::File profileDirectory()
+juce::File standaloneProfileDirectory()
 {
-#if VELCAL_PORTABLE
-   #if JUCE_LINUX
-    const auto appImage = juce::SystemStats::getEnvironmentVariable("APPIMAGE", {});
-    if (juce::File::isAbsolutePath(appImage))
-        return juce::File(appImage).getParentDirectory().getChildFile("profiles");
-   #endif
-    return juce::File::getSpecialLocation(juce::File::currentApplicationFile)
-        .getParentDirectory().getChildFile("profiles");
-#else
-    return juce::File(VELCAL_DEFAULT_PROFILE_DIR);
-#endif
+    return velcalProfileDirectory();
 }
 
 juce::File appStateFile()
 {
-    return profileDirectory().getChildFile(".velcal-app-state.json");
+    return standaloneProfileDirectory().getChildFile(".velcal-app-state.json");
 }
 
 juce::String profileDisplayName(const juce::File& file)
@@ -289,7 +280,9 @@ CaptureGuidance makeCaptureGuidance(
 
 } // namespace
 
-MainComponent::MainComponent()
+MainComponent::MainComponent(PluginState* plugin)
+    : pluginState(plugin), ownedMidiEngine(plugin ? nullptr : std::make_unique<MidiEngine>()),
+      midiEngine(plugin ? plugin->midi : *ownedMidiEngine)
 {
     setOpaque(true);
     setWantsKeyboardFocus(true);
@@ -442,13 +435,22 @@ MainComponent::MainComponent()
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
-    refreshMidiInputs();
-    refreshMidiOutputs();
+    if (!pluginState) {
+        refreshMidiInputs();
+        refreshMidiOutputs();
+    } else {
+        for (auto* control : std::array<juce::Component*, 5>{
+                &deviceLabel, &midiInputBox, &outputLabel, &midiOutputBox, &routingToggle})
+            control->setVisible(false);
+        pluginRevision = pluginState->revision();
+        syncPluginState();
+    }
     refreshProfileList();
-    loadAppState();
+    if (!pluginState)
+        loadAppState();
     startTimerHz(12);
 
-    if (!profile) {
+    if (!profile && !pluginState) {
         const auto defaultProfile = profileDirectory().getChildFile("kawai-white-partial.velcal.json");
         if (defaultProfile.existsAsFile())
             loadProfile(defaultProfile);
@@ -456,10 +458,12 @@ MainComponent::MainComponent()
     if (!profile)
         updateLabels();
     setActiveTab(false);
+    updateCaptureControls();
 }
 
 MainComponent::~MainComponent()
 {
+    stopTimer();
     midiInputBox.removeListener(this);
     midiOutputBox.removeListener(this);
     globalPresetBox.removeListener(this);
@@ -543,6 +547,10 @@ void MainComponent::loadAppState()
 
 void MainComponent::saveAppState() const
 {
+    if (pluginState) {
+        publishPluginState();
+        return;
+    }
     const auto inputIndex = midiInputBox.getSelectedId() - 1;
     const auto outputIndex = midiOutputBox.getSelectedId() - 2;
     nlohmann::json json;
@@ -556,13 +564,9 @@ void MainComponent::saveAppState() const
         json["midiOutputName"] = midiOutputs[outputIndex].name.toStdString();
     }
     if (profileFile != juce::File{}) {
-#if VELCAL_PORTABLE
         json["lastProfilePath"] = (profileFile.isAChildOf(profileDirectory())
             ? profileFile.getRelativePathFrom(profileDirectory())
             : profileFile.getFullPathName()).toStdString();
-#else
-        json["lastProfilePath"] = profileFile.getFullPathName().toStdString();
-#endif
     }
 
     try {
@@ -836,7 +840,7 @@ void MainComponent::showCaptureGuide()
 void MainComponent::beginSectionCapture()
 {
     const auto inputIndex = midiInputBox.getSelectedId() - 1;
-    if (!juce::isPositiveAndBelow(inputIndex, midiInputs.size())) {
+    if (!pluginState && !juce::isPositiveAndBelow(inputIndex, midiInputs.size())) {
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "No MIDI input",
@@ -844,13 +848,13 @@ void MainComponent::beginSectionCapture()
         return;
     }
 
-    if (midiEngine.isRouting()) {
+    if (!pluginState && midiEngine.isRouting()) {
         routingToggle.setToggleState(false, juce::dontSendNotification);
         midiEngine.stopRouting();
     }
 
     juce::String error;
-    if (!midiEngine.startCapture(midiInputs[inputIndex].identifier, error)) {
+    if (!midiEngine.startCapture(pluginState ? juce::String{} : midiInputs[inputIndex].identifier, error)) {
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Capture could not start",
@@ -866,8 +870,13 @@ void MainComponent::beginSectionCapture()
 
 void MainComponent::finishSectionCapture()
 {
+    const auto captureError = midiEngine.getActivity().outputError;
     const auto events = midiEngine.finishCapture();
     updateCaptureControls();
+    if (pluginState && captureError.isNotEmpty()) {
+        statusLabel.setText(captureError, juce::dontSendNotification);
+        return;
+    }
 
     velcal::SegmentId segmentId = 1;
     if (profile) {
@@ -933,9 +942,12 @@ void MainComponent::updateCaptureControls()
 
 void MainComponent::timerCallback()
 {
+    if (pluginState)
+        syncPluginState();
     const auto activity = midiEngine.getActivity();
     if (activity.outputError.isNotEmpty()) {
         midiEngine.stopRouting();
+        updateCaptureControls();
         routingToggle.setToggleState(false, juce::dontSendNotification);
         statusLabel.setText(activity.outputError, juce::dontSendNotification);
         return;
@@ -1113,6 +1125,7 @@ void MainComponent::markProfileDirty()
 {
     profileDirty = true;
     selectProfileInList(profileFile);
+    publishPluginState();
 }
 
 void MainComponent::confirmDiscardUnsaved(std::function<void()> action)
@@ -1225,6 +1238,7 @@ void MainComponent::saveCurrentProfile()
 
     const auto suggestedName = juce::File::createLegalFileName(profile->profileName)
         + ".velcal.json";
+    profileDirectory().createDirectory();
     fileChooser = std::make_unique<juce::FileChooser>(
         "Save VelCal profile",
         profileDirectory().getChildFile(suggestedName),
@@ -1590,29 +1604,54 @@ void MainComponent::updateEffectiveMaps()
 {
     if (!profile)
         return;
-    auto effective = profile->generated.noteMaps;
-    const auto global = profile->globalCurve.points.empty()
-        ? velcal::makeVelocityCurve(
-            profile->globalCurve.curvature,
-            profile->globalCurve.minimumOutput,
-            profile->globalCurve.maximumOutput)
-        : velcal::makeVelocityCurve(
-            profile->globalCurve.points,
-            profile->globalCurve.smooth);
-    for (std::size_t note = 0; note < effective.size(); ++note) {
-        const auto& overrideCurve = profile->noteCurveOverrides[note];
-        if (!overrideCurve.points.empty())
-            effective[note] = velcal::makeVelocityCurve(
-                overrideCurve.points, overrideCurve.smooth);
-        const auto adjustment = profile->noteAdjustments[note];
-        for (std::size_t velocity = 1; velocity < effective[note].values.size(); ++velocity) {
-            const auto calibrated = effective[note].values[velocity];
-            const auto adjusted = static_cast<std::uint8_t>(std::clamp(
-                static_cast<int>(calibrated) + adjustment, 1, 127));
-            effective[note].values[velocity] = global.apply(adjusted);
-        }
+    if (pluginState)
+        publishPluginState();
+    else
+        midiEngine.setMaps(velcal::effectiveMaps(*profile));
+}
+
+juce::File MainComponent::profileDirectory() const
+{
+    return velcalProfileDirectory();
+}
+
+void MainComponent::publishPluginState() const
+{
+    if (!pluginState)
+        return;
+    PluginState::Snapshot next;
+    next.profile = profile;
+    next.profileFile = profileFile;
+    next.dirty = profileDirty;
+    next.keyGroup = keyGroupBox.getSelectedId();
+    if (pluginState->publish(std::move(next), pluginRevision))
+        ++pluginRevision;
+}
+
+void MainComponent::syncPluginState()
+{
+    if (pluginStateLoaded && pluginState->revision() == pluginRevision)
+        return;
+    const auto state = pluginState->snapshot();
+    if (pluginStateLoaded && state.revision == pluginRevision)
+        return;
+    if (state.revision != pluginRevision) {
+        midiEngine.cancelCapture();
+        captureGuide.reset();
     }
-    midiEngine.setMaps(effective);
+    pluginRevision = state.revision;
+    pluginStateLoaded = true;
+    profile = state.profile;
+    profileFile = state.profileFile;
+    profileDirty = state.dirty;
+    keyGroupBox.setSelectedId(state.keyGroup, juce::dontSendNotification);
+    activeCurvePoint.reset();
+    refreshProfileList();
+    refreshCurvePresets();
+    updateEditingControls();
+    updateCaptureControls();
+    updateLabels();
+    repaint();
 }
 
 void MainComponent::updateEditingControls()
@@ -1695,14 +1734,16 @@ void MainComponent::resized()
 
     area.removeFromTop(18);
     auto sidebar = area.removeFromLeft(245).withTrimmedRight(28);
-    deviceLabel.setBounds(sidebar.removeFromTop(24));
-    midiInputBox.setBounds(sidebar.removeFromTop(38));
-    sidebar.removeFromTop(18);
-    outputLabel.setBounds(sidebar.removeFromTop(24));
-    midiOutputBox.setBounds(sidebar.removeFromTop(38));
-    sidebar.removeFromTop(12);
-    routingToggle.setBounds(sidebar.removeFromTop(32));
-    sidebar.removeFromTop(14);
+    if (!pluginState) {
+        deviceLabel.setBounds(sidebar.removeFromTop(24));
+        midiInputBox.setBounds(sidebar.removeFromTop(38));
+        sidebar.removeFromTop(18);
+        outputLabel.setBounds(sidebar.removeFromTop(24));
+        midiOutputBox.setBounds(sidebar.removeFromTop(38));
+        sidebar.removeFromTop(12);
+        routingToggle.setBounds(sidebar.removeFromTop(32));
+        sidebar.removeFromTop(14);
+    }
 
     auto globalSidebar = sidebar;
     keyGroupLabel.setBounds(sidebar.removeFromTop(24));

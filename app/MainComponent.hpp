@@ -2,6 +2,7 @@
 
 #include "velcal/profile.hpp"
 #include "MidiEngine.hpp"
+#include "PluginState.hpp"
 
 #include <JuceHeader.h>
 
@@ -15,7 +16,7 @@ class MainComponent final : public juce::Component,
                             private juce::ScrollBar::Listener,
                             private juce::Timer {
 public:
-    MainComponent();
+    explicit MainComponent(PluginState* plugin = nullptr);
     ~MainComponent() override;
     void requestClose(std::function<void()> close);
 
@@ -71,6 +72,9 @@ private:
     void applySelectedCurvePreset();
     void saveCurvePreset();
     void updateEffectiveMaps();
+    void publishPluginState() const;
+    void syncPluginState();
+    juce::File profileDirectory() const;
     void updateEditingControls();
     void ensureEditableCurve();
     std::vector<velcal::VelocityCurvePoint> sampledCurrentCurve() const;
@@ -134,7 +138,11 @@ private:
     juce::Array<juce::MidiDeviceInfo> midiInputs;
     juce::Array<juce::MidiDeviceInfo> midiOutputs;
     juce::Array<juce::File> profileFiles;
-    MidiEngine midiEngine;
+    PluginState* pluginState{};
+    mutable std::uint64_t pluginRevision{};
+    bool pluginStateLoaded{};
+    std::unique_ptr<MidiEngine> ownedMidiEngine;
+    MidiEngine& midiEngine;
     std::optional<velcal::CalibrationProfile> profile;
     juce::File profileFile;
     std::uint64_t captureStartMessageCount{};

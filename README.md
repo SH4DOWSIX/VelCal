@@ -11,10 +11,11 @@ physical action.
 
 **[Download VelCal](https://github.com/SH4DOWSIX/VelCal/releases/latest)**
 
-Portable builds are available for Windows, Linux, and macOS. Only Windows has
-been tested with a real keyboard and DAW; Linux and macOS are experimental.
-See the [release notes](docs/releases/0.0.1.md) for system requirements and help
-with unsigned-app security warnings.
+Version 0.0.2 provides installers for standalone and VST3 on Windows, Linux, and
+macOS, plus an AU MIDI effect for Logic on macOS. Only Windows has real keyboard
+and DAW validation; Linux/macOS are experimental. See
+[installation and DAW routing](docs/INSTALLING.md) and
+[release notes](docs/releases/0.0.2.md), including unsigned-installer warnings.
 
 ## What You Can Do
 
@@ -30,9 +31,9 @@ with unsigned-app security warnings.
 
 ## Get Started
 
-1. Download the portable package for your operating system and extract the
-   whole folder somewhere writable. On Windows, run `VelCal.exe`; on macOS,
-   open `VelCal.app`; on Linux, run `VelCal.AppImage`.
+1. Run the installer for your operating system and choose standalone and/or
+   plugins. Open standalone from your applications menu, or load the plugin
+   in your DAW following the [routing guide](docs/INSTALLING.md#daw-routing).
 2. Connect your MIDI keyboard and select it under **MIDI input**.
 3. Select **New profile** to start a calibration, or **Open profile** to load one
    you have already saved.
@@ -79,7 +80,12 @@ it is already close to neutral. A key without a status strip has no measurements
 
 ## Play Through Your DAW
 
-The MIDI path should be:
+With VST3, load VelCal as an instrument on its own track, then select that
+instance as the piano track's MIDI input. It is not an audio insert. With Logic,
+load the AU version in the piano track's MIDI FX slot, before the instrument.
+Plugins include calibration and all editing features; the DAW selects devices.
+
+For standalone, the MIDI path should be:
 
 ```text
 Keyboard -> VelCal -> MIDI port -> DAW or software instrument
@@ -123,8 +129,10 @@ global presets inside your profile.
 
 Use **Save profile** after calibration or editing. Changes are not saved
 automatically, and there is currently no unsaved-change warning when closing.
-Portable builds keep profiles and preferences in `profiles/` beside the app;
-keep that folder when moving or updating VelCal, and back up important profiles.
+Installed builds keep profiles/preferences in writable per-user storage and
+preserve them on uninstall. See [profile locations](docs/INSTALLING.md#profiles-and-updates).
+Back up important profiles. Plugin project state includes completed profiles
+and edits, but not unfinished calibration captures.
 
 ## Notes And Help
 

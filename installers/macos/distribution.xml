@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+  <title>VelCal</title>
+  <license file="LICENSE.txt"/>
+  <options customize="always" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+  <allowed-os-versions><os-version min="11.0"/></allowed-os-versions>
+  <choices-outline>
+    <line choice="standalone"/><line choice="vst3"/><line choice="au"/><line choice="shared"/>
+  </choices-outline>
+  <choice id="standalone" title="Standalone application" start_selected="true"><pkg-ref id="org.velcal.app"/></choice>
+  <choice id="vst3" title="VST3 instrument" start_selected="true"><pkg-ref id="org.velcal.vst3"/></choice>
+  <choice id="au" title="Audio Unit MIDI effect (Logic Pro)" start_selected="true"><pkg-ref id="org.velcal.au"/></choice>
+  <choice id="shared" title="Licences and uninstaller" visible="false" enabled="false" start_selected="true"><pkg-ref id="org.velcal.shared"/></choice>
+  <pkg-ref id="org.velcal.app">app.pkg</pkg-ref>
+  <pkg-ref id="org.velcal.vst3">vst3.pkg</pkg-ref>
+  <pkg-ref id="org.velcal.au">au.pkg</pkg-ref>
+  <pkg-ref id="org.velcal.shared">shared.pkg</pkg-ref>
+</installer-gui-script>

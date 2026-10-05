@@ -53,6 +53,16 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Current release work is installer-first: Windows Setup, Linux DEB/user-local RUN,
+and universal macOS PKG. VST3 is an instrument-style MIDI processor on all three;
+AU is a separate macOS MIDI effect for Logic. Full calibration/editing features
+are shared; DAW plugins omit physical MIDI device/routing selectors. Installed
+user data uses `app/DataPaths.hpp`, with `VELCAL_DATA_DIR` for isolated tests.
+Historical portable milestones below describe earlier work, not the active
+build workflow. Windows Studio One live correction and project recall are now
+user-confirmed. Local installer Release passed all three suites on 2026-10-05.
+Native CI and release publication are in progress, not yet verified.
+
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys
 and play through a DAW. The user reported being happy with the calibration and
@@ -62,7 +72,7 @@ calibration pass.
 
 Current versions:
 
-- Application/CMake project version: `0.0.1`
+- Application/CMake project version: `0.0.2`
 - Profile schema: `4`
 - Calibration algorithm: `0.4.0`
 - JUCE: `9.0.3`, pinned under `.deps`
@@ -92,6 +102,75 @@ pull-request triggers. Until this workflow change is pushed, source-only pushes
 must use `[skip ci]` to avoid the remote's existing automatic build triggers.
 
 ## Implemented Behavior
+
+### VST3 Source Milestone (2026-10-05)
+
+The user requested full standalone feature parity in VST3, excluding MIDI device
+selection/routing handled by the DAW. Local source now includes a JUCE VST3
+MIDI-processing instrument target for Windows/Linux/macOS and the shared calibration/editing UI.
+Guided calibration receives raw host MIDI with sample-based timing. Correction
+runs without an open editor; instances retain independent profiles and embed
+complete profile data, including unsaved edits, in DAW project state. Profile
+schema remains 4 and files are interchangeable with standalone. Unfinished
+capture is retained across editor close/reopen but not saved in project state.
+
+The host callback uses preallocated capture storage and a nonblocking map-copy
+attempt, without OS MIDI ports, file operations, or statistical fitting. The
+standalone routing worker and portable preferences remain separate. Development
+plugin profile dialogs stay in the workspace's profiles directory; deployed
+copies use user application data, never the DAW executable/plugin directory.
+
+The Windows portable script now includes `velcal_plugin_VST3` and plugin tests,
+and packages the complete `.vst3` bundle beside standalone. Manual-only platform
+CI and Unix packaging have matching target/bundle additions. The subsequent
+user-authorized Windows portable Release build passed all three CTest suites
+(core, app, plugin; 3/3) and generated standalone plus the VST3 bundle in
+`build/portable/VelCal-Windows-x64-20261005-201813-731` and its ZIP. JUCE's VST3
+manifest helper loaded the built module and generated its manifest. Package
+inspection verified required binaries/licences, an empty profiles directory,
+no personal profiles/preferences or README in the ZIP, and matching hashes
+for every bundled plugin file. No workflow dispatch, source push, or release
+occurred. Automated tests do not establish compatibility with a real DAW.
+Next: user Windows DAW validation of
+calibration, passthrough, editor reopening, multiple instances and project recall.
+Only after Windows VST3 works well should an installer install both standalone
+and VST3. Linux/macOS plugin validation remains pending; host MIDI-effect support
+and MIDI routing differ across DAWs.
+
+### VST3 Instrument Compatibility Follow-Up (2026-10-05)
+
+The first Windows plugin was categorized as an effect with no audio buses.
+In Studio One, the user loaded it on the piano channel's audio inserts. It
+received no keyboard MIDI until a separate instrument track explicitly fed it,
+then showed MIDI activity but did not affect the piano. The user could not
+choose that effect's output as the piano track's MIDI input.
+
+At the user's request, VelCal now follows
+[Springbeats' published VelPro VST3 design](https://springbeats.com/2026/02/19/velpro-vst3-format/):
+an instrument category, MIDI input/output, and silent audio output. JUCE flags
+are IS_SYNTH=TRUE and IS_MIDI_EFFECT=FALSE, VST3 categories Instrument/Tools,
+with one default stereo output (mono also accepted) and no audio inputs.
+Normal processing clears audio and corrects MIDI; bypass clears audio and
+leaves MIDI unchanged. Plugin identifiers and profile/DAW state formats remain
+unchanged. Full calibration/editing and standalone remain intact.
+
+The intended Studio One workflow is a VelCal instrument track receiving the
+keyboard, with piano instrument tracks receiving VelCal's MIDI output. It
+requires replacing the old bundle, rescanning its changed category, and loading
+it from Instruments rather than audio inserts. This is not a same-track Note FX
+integration and does not host the piano plugin. The user authorized the Windows
+Release build for this change. The standard portable build succeeded and all
+three suites passed (3/3). The new package is
+`build/portable/VelCal-Windows-x64-20261005-205407-326` with a matching ZIP.
+JUCE's manifest helper loaded the module and generated Instrument/Tools
+categories with the existing class IDs. Package checks passed for required
+binaries/licences, matching plugin file hashes, an empty profiles directory,
+and absence of personal profiles/preferences or README in the ZIP.
+The user subsequently confirmed corrected live playing and song save/reopen in
+Studio One on Windows. Linux/macOS hardware and real-host validation remain
+pending. No remote update occurred at this historical milestone.
+Plugin regressions now also cover instrument flags, stereo/mono bus layouts,
+audio silence, corrected MIDI with an audio bus, and bypass passthrough.
 
 ### Calibration Core
 
@@ -492,6 +571,18 @@ user's explicit permission.
 
 ## Prioritized Next Work
 
+### Active: Installer And AU Release
+
+The user authorized implementation, GitHub push, all three native builds,
+monitoring/fixing failures, and publication after passing checks on 2026-10-05.
+Portable distribution is retired by request; no paid Apple signing/notarization.
+
+1. Windows installer Release and core/app/plugin suites passed locally (3/3).
+2. Complete review, native CI, installer smoke tests, and macOS AU validation.
+3. Inspect artifacts and publish 0.0.2 only after all platform jobs pass.
+4. Obtain real Linux/macOS/Logic testing; CI is not hardware/host evidence.
+5. Continue full Windows calibration/editor/pedal/multiple-instance host checks.
+
 ### P0: Validate the Current Milestone
 
 1. Start a new profile with `KAWAI USB MIDI`.
@@ -551,7 +642,7 @@ Treat failures found here as higher priority than new features.
    do not automatically push routine development changes.
 2. Keep the full AGPL-3.0 licence and dependency licence notices in packages.
 3. Maintain the passing three-platform CI and inspect each future release's
-   portable packages before publication.
+   installer packages before publication.
 4. Add trusted publisher signing/notarization when available.
 5. Preserve explicit platform testing status, issue reporting, checksums, and
    unsigned-app security guidance in future release notes. These were included
@@ -568,14 +659,19 @@ Treat failures found here as higher priority than new features.
 - `app/MidiEngine.*`: device lifecycle, capture buffering, routing worker/safety
 - `app/MainComponent.*`: desktop workflow, painting, curve editor, controls
 - `app/Main.cpp`: JUCE application/window setup
+- `app/PluginProcessor.*`: VST3 processor/editor and DAW lifecycle
+- `app/PluginState.*`: per-instance profiles, map publication, DAW state
 - `tools/windows_capture.cpp`: older Windows console capture/instrumentation tool
 - `tools/analyze_capture.cpp`: offline CSV reprocessing and validation
 - `tests/calibration_tests.cpp`: core regression suite
 - `tests/app_tests.cpp`: fake MIDI output, capture controls, and unsaved-profile regressions
-- `.github/workflows/portable-builds.yml`: three-platform build/test artifacts
-- `tools/package_unix_portable.sh`: Linux AppImage and universal macOS packages
+- `tests/plugin_tests.cpp`: host MIDI, raw capture/overflow, editor lifetime and DAW recall (Windows Release passed)
+- `.github/workflows/installer-builds.yml`: manual native installer build/test jobs
+- `tools/package_unix_installers.sh`: Linux DEB/RUN and universal macOS PKG
 - `tools/run_linux_gui_check.sh`: window-manager setup for headless Linux checks
-- `tools/package_windows_portable.ps1`: Windows portable folder/ZIP packaging
+- `tools/package_windows_installer.ps1`: pinned NSIS Windows setup packaging
+- `app/DataPaths.hpp`: installed per-user storage and test overrides
+- `installers/`: platform install/uninstall definitions
 - `docs/releases/0.0.1.md`: published release notes and security guidance
 - `docs/architecture.md`: concise architectural overview
 - `README.md`: user-facing introduction, calibration, routing, and profile guide
@@ -583,29 +679,20 @@ Treat failures found here as higher priority than new features.
 
 ## Build and Run
 
-The standard Windows build workflow is `build-portable.bat` from the workspace
-root (or double-click it), producing a local Windows x64 portable Release.
-Agents use `.\build-portable.bat --no-pause`. It configures `build/windows-portable`,
-enables `VELCAL_PORTABLE`, statically links the MSVC runtime, builds the app plus
-core/app tests in Release, runs CTest, and calls `tools/package_windows_portable.ps1`.
-Each successful run creates a new folder and ZIP under `build/portable`, containing
-the EXE, licence, dependency licence notices, and an empty profiles directory. The repository README and
-setup instructions remain on GitHub and are not bundled. Personal data is never
-copied into the package. Temporary files are directed to `.tmp`; downloaded
-dependencies remain in `.deps`. The script requires existing CMake, Git, Visual
-Studio C++ tools and a Windows SDK; it does not install tools or publish anything.
-Use `build-portable.bat --no-pause` for an unattended terminal run.
+Use `.\build-installers.bat --no-pause` for Windows x64 Release. It configures
+`build/windows-installer` with `VELCAL_INSTALLED=ON`, statically links the MSVC
+runtime, builds standalone/VST3 and core/app/plugin tests, runs CTest, then
+packages with pinned, hash-checked NSIS under `.deps`. Setup EXEs go into
+`build/installers`; temporary files stay in `.tmp`. No personal data is bundled.
 
-GitHub Actions uses `.github/workflows/portable-builds.yml` for Windows x64,
-Linux x64 (Ubuntu 22.04 baseline), and universal macOS (11+ target). It runs only
-by manual dispatch after an explicit GitHub build request, not on source pushes
-or pull requests. Windows uses
-the existing batch workflow with deterministic release package names. Unix jobs
-build/test in `build/ci` and use `tools/package_unix_portable.sh`. Linux packages
-an AppImage with SHA-256-checked linuxdeploy; macOS verifies both CPU slices and
-ad-hoc signs its bundle. Artifacts contain no README or personal data. Builds
-upload artifacts but never automatically publish a release. Release notes live
-in `docs/releases/0.0.1.md`; only Windows has real MIDI/DAW test evidence.
+`.github/workflows/installer-builds.yml` is manual-only, never triggered by
+push/PR. It builds Windows x64, Linux x64 (Ubuntu 22.04 baseline), and universal
+macOS (11+ target). Unix builds use `build/ci` and
+`tools/package_unix_installers.sh`. Linux outputs DEB and user-local RUN;
+macOS verifies universal slices, ad-hoc signatures, and AU validation, then
+outputs an unsigned PKG. Native installer/uninstaller smoke checks preserve
+user profiles. Artifacts do not automatically publish releases. Current release
+notes are `docs/releases/0.0.2.md`. Only Windows has real MIDI/DAW evidence.
 
 For specific debugging or offline-tool work, the separate Debug build remains
 available. It is not the default build for local app delivery. From

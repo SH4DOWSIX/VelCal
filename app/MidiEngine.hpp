@@ -54,6 +54,10 @@ public:
     bool isRouting() const noexcept;
     bool isCapturing() const noexcept;
     Activity getActivity() const;
+    void enableHostMode();
+    bool isHostMode() const noexcept { return hostMode; }
+    void processHostMidi(juce::MidiBuffer& midi, double sampleRate, int blockSamples);
+    void stopHostCapture() noexcept;
 
 private:
     void handleIncomingMidiMessage(
@@ -84,4 +88,19 @@ private:
     std::atomic<std::uint8_t> lastNote{0};
     std::atomic<std::uint8_t> lastRawVelocity{0};
     std::atomic<std::uint8_t> lastCorrectedVelocity{0};
+    bool hostMode{};
+    juce::SpinLock hostMapLock;
+    MapBank hostPublishedMaps{};
+    MapBank hostAudioMaps{};
+    struct HostCaptureEvent {
+        velcal::NoteOn note;
+        std::uint64_t generation{};
+    };
+    static constexpr int hostCaptureCapacity = 32768;
+    juce::AbstractFifo hostCaptureFifo{hostCaptureCapacity};
+    std::vector<HostCaptureEvent> hostCaptureEvents;
+    std::atomic<std::uint64_t> hostCaptureGeneration{0};
+    std::atomic<std::uint64_t> hostCaptureOverflow{0};
+    double hostElapsedUs{};
+    void drainHostCapture();
 };

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 #if defined(_WIN32)
@@ -326,7 +327,7 @@ CalibrationResult readResult(const Json& json)
 
 } // namespace
 
-void saveProfile(const CalibrationProfile& profile, const std::filesystem::path& path)
+std::string serializeProfile(const CalibrationProfile& profile)
 {
     Json presses = Json::array();
     for (const auto& press : profile.presses)
@@ -367,7 +368,12 @@ void saveProfile(const CalibrationProfile& profile, const std::filesystem::path&
         });
     }
 
-    writeProfileAtomically(path, json.dump(2) + '\n');
+    return json.dump(2) + '\n';
+}
+
+void saveProfile(const CalibrationProfile& profile, const std::filesystem::path& path)
+{
+    writeProfileAtomically(path, serializeProfile(profile));
 }
 
 CalibrationProfile loadProfile(const std::filesystem::path& path)
@@ -375,8 +381,12 @@ CalibrationProfile loadProfile(const std::filesystem::path& path)
     std::ifstream input(path);
     if (!input)
         throw std::runtime_error("could not open profile file");
-    Json json;
-    input >> json;
+    return deserializeProfile(std::string(std::istreambuf_iterator<char>(input), {}));
+}
+
+CalibrationProfile deserializeProfile(const std::string& data)
+{
+    const auto json = Json::parse(data);
 
     CalibrationProfile profile;
     profile.schemaVersion = json.at("schemaVersion").get<std::uint32_t>();
@@ -430,6 +440,26 @@ CalibrationProfile loadProfile(const std::filesystem::path& path)
     profile.schemaVersion = currentProfileSchemaVersion;
     profile.algorithmVersion = currentAlgorithmVersion;
     return profile;
+}
+
+std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile)
+{
+    auto maps = profile.generated.noteMaps;
+    const auto global = profile.globalCurve.points.empty()
+        ? makeVelocityCurve(profile.globalCurve.curvature,
+            profile.globalCurve.minimumOutput, profile.globalCurve.maximumOutput)
+        : makeVelocityCurve(profile.globalCurve.points, profile.globalCurve.smooth);
+    for (std::size_t note = 0; note < maps.size(); ++note) {
+        const auto& curve = profile.noteCurveOverrides[note];
+        if (!curve.points.empty())
+            maps[note] = makeVelocityCurve(curve.points, curve.smooth);
+        for (std::size_t velocity = 1; velocity < maps[note].values.size(); ++velocity) {
+            const auto adjusted = static_cast<std::uint8_t>(std::clamp(
+                static_cast<int>(maps[note].values[velocity]) + profile.noteAdjustments[note], 1, 127));
+            maps[note].values[velocity] = global.apply(adjusted);
+        }
+    }
+    return maps;
 }
 
 } // namespace velcal

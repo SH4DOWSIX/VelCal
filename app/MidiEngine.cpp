@@ -57,6 +57,11 @@ MidiEngine::~MidiEngine() { stopRouting(); }
 
 void MidiEngine::setMaps(const MapBank& newMaps)
 {
+    if (hostMode) {
+        const juce::SpinLock::ScopedLockType lock(hostMapLock);
+        hostPublishedMaps = newMaps;
+        return;
+    }
     std::atomic_store(&maps,
         std::shared_ptr<const MapBank>(std::make_shared<MapBank>(newMaps)));
 }
@@ -101,6 +106,14 @@ bool MidiEngine::startRouting(
 
 bool MidiEngine::startCapture(const juce::String& inputIdentifier, juce::String& error)
 {
+    if (hostMode) {
+        stopHostCapture();
+        drainHostCapture();
+        capturedEvents.clear();
+        hostCaptureOverflow.store(0, std::memory_order_release);
+        hostCaptureGeneration.fetch_add(1, std::memory_order_acq_rel);
+        return true;
+    }
     stopRouting();
     {
         const std::scoped_lock lock(captureMutex);
@@ -119,6 +132,8 @@ bool MidiEngine::startCapture(const juce::String& inputIdentifier, juce::String&
 
 std::vector<velcal::NoteOn> MidiEngine::getCapturedEventsSnapshot()
 {
+    if (hostMode)
+        drainHostCapture();
     const std::scoped_lock lock(captureMutex);
     return capturedEvents;
 }
@@ -126,6 +141,10 @@ std::vector<velcal::NoteOn> MidiEngine::getCapturedEventsSnapshot()
 std::vector<velcal::NoteOn> MidiEngine::finishCapture()
 {
     capturing.store(false, std::memory_order_release);
+    if (hostMode) {
+        stopHostCapture();
+        drainHostCapture();
+    }
     if (input)
         input->stop();
     input.reset();
@@ -139,6 +158,10 @@ void MidiEngine::cancelCapture() { static_cast<void>(finishCapture()); }
 
 void MidiEngine::stopRouting()
 {
+    if (hostMode) {
+        stopHostCapture();
+        return;
+    }
     const auto session = std::atomic_load(&outputSession);
     if (session) {
         const std::scoped_lock lock(session->mutex);
@@ -169,11 +192,17 @@ void MidiEngine::stopRouting()
 
 bool MidiEngine::isRouting() const noexcept
 {
+    if (hostMode)
+        return true;
     const auto session = std::atomic_load(&outputSession);
     return session && !session->stopped.load(std::memory_order_acquire);
 }
 
-bool MidiEngine::isCapturing() const noexcept { return capturing.load(std::memory_order_acquire); }
+bool MidiEngine::isCapturing() const noexcept
+{
+    return hostMode ? (hostCaptureGeneration.load(std::memory_order_acquire) & 1) != 0
+                    : capturing.load(std::memory_order_acquire);
+}
 
 MidiEngine::Activity MidiEngine::getActivity() const
 {
@@ -184,6 +213,12 @@ MidiEngine::Activity MidiEngine::getActivity() const
         lastRawVelocity.load(std::memory_order_relaxed),
         lastCorrectedVelocity.load(std::memory_order_relaxed),
         false, messagesDropped.load(std::memory_order_relaxed), false, {}};
+    if (hostMode) {
+        const auto overflow = hostCaptureOverflow.load(std::memory_order_acquire);
+        if (overflow != 0 && overflow == hostCaptureGeneration.load(std::memory_order_acquire))
+            activity.outputError = "Capture stopped: too many pending notes. Start the section again.";
+        return activity;
+    }
     const auto session = std::atomic_load(&outputSession);
     if (!session)
         return activity;
@@ -202,6 +237,77 @@ MidiEngine::Activity MidiEngine::getActivity() const
     const std::scoped_lock lock(session->mutex);
     activity.outputError = session->error;
     return activity;
+}
+
+void MidiEngine::enableHostMode()
+{
+    hostCaptureEvents.resize(hostCaptureCapacity);
+    hostMode = true;
+    for (auto& map : hostPublishedMaps)
+        map = velcal::VelocityMap::identity();
+    hostAudioMaps = hostPublishedMaps;
+}
+
+void MidiEngine::drainHostCapture()
+{
+    const auto token = hostCaptureGeneration.load(std::memory_order_acquire);
+    const auto generation = (token & 1) != 0 ? token : token - 1;
+    const auto read = hostCaptureFifo.read(hostCaptureFifo.getNumReady());
+    read.forEach([&](int index) {
+        const auto& event = hostCaptureEvents[static_cast<std::size_t>(index)];
+        if (event.generation == generation)
+            capturedEvents.push_back(event.note);
+    });
+}
+
+void MidiEngine::stopHostCapture() noexcept
+{
+    // Odd tokens record; stopping advances to even without resetting the live FIFO.
+    auto token = hostCaptureGeneration.load(std::memory_order_acquire);
+    while ((token & 1) != 0 && !hostCaptureGeneration.compare_exchange_weak(
+        token, token + 1, std::memory_order_acq_rel)) {}
+}
+
+void MidiEngine::processHostMidi(juce::MidiBuffer& midi, double sampleRate, int blockSamples)
+{
+    // Never wait for UI edits, allocate capture storage, or open OS MIDI ports here.
+    {
+        const juce::SpinLock::ScopedTryLockType lock(hostMapLock);
+        if (lock.isLocked())
+            hostAudioMaps = hostPublishedMaps;
+    }
+    for (const auto metadata : midi) {
+        messagesReceived.fetch_add(1, std::memory_order_relaxed);
+        if (metadata.numBytes == 3 && (metadata.data[0] & 0xf0) == 0x90 && metadata.data[2] != 0) {
+            const auto note = metadata.data[1];
+            const auto raw = metadata.data[2];
+            if (note >= 128 || raw >= 128)
+                continue;
+            auto generation = hostCaptureGeneration.load(std::memory_order_acquire);
+            if ((generation & 1) != 0) {
+                const auto write = hostCaptureFifo.write(1);
+                if (write.blockSize1 + write.blockSize2 == 1) {
+                    write.forEach([&](int index) {
+                        hostCaptureEvents[static_cast<std::size_t>(index)] = {
+                            {note, raw, static_cast<velcal::TimestampUs>(std::llround(hostElapsedUs
+                                + std::max(0, metadata.samplePosition) * 1000000.0 / sampleRate))}, generation};
+                    });
+                } else {
+                    if (hostCaptureGeneration.compare_exchange_strong(
+                            generation, generation + 1, std::memory_order_acq_rel))
+                        hostCaptureOverflow.store(generation + 1, std::memory_order_release);
+                }
+            }
+            const auto corrected = hostAudioMaps[note].apply(raw);
+            // MidiBuffer owns these bytes; changing velocity preserves all event offsets and ordering.
+            const_cast<juce::uint8*>(metadata.data)[2] = corrected;
+            lastNote.store(note, std::memory_order_relaxed);
+            lastRawVelocity.store(raw, std::memory_order_relaxed);
+            lastCorrectedVelocity.store(corrected, std::memory_order_relaxed);
+        }
+        messagesSent.fetch_add(1, std::memory_order_relaxed);
+    }
+    hostElapsedUs += std::max(0, blockSamples) * 1000000.0 / sampleRate;
 }
 
 void MidiEngine::tripRoutingSafety()

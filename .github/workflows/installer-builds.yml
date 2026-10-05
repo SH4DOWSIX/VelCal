@@ -1,0 +1,122 @@
+name: Installer builds
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Build, test, and package
+        shell: cmd
+        run: build-installers.bat --no-pause
+      - name: Installer smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = (Get-ChildItem build/installers/*Setup.exe).FullName
+          $app = Join-Path $env:RUNNER_TEMP 'VelCal Installed'
+          $process = Start-Process -FilePath $setup -ArgumentList "/S /D=$app" -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'Installer failed' }
+          if (-not (Test-Path "$app/VelCal.exe")) { throw 'Missing standalone' }
+          if (-not (Test-Path "$env:CommonProgramFiles/VST3/VelCal.vst3/Contents/x86_64-win/VelCal.vst3")) { throw 'Missing VST3' }
+          $env:VELCAL_DATA_DIR = Join-Path $env:RUNNER_TEMP 'VelCal test data'
+          $process = Start-Process -FilePath "$app/VelCal.exe" -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 4
+          if ($process.HasExited) { throw 'Installed app exited early' }
+          $process.CloseMainWindow() | Out-Null
+          if (-not $process.WaitForExit(5000)) { $process.Kill(); throw 'App did not close' }
+          New-Item -ItemType Directory -Force -Path "$env:VELCAL_DATA_DIR/profiles" | Out-Null
+          Set-Content "$env:VELCAL_DATA_DIR/profiles/preserve.txt" 'preserve'
+          $process = Start-Process -FilePath "$app/Uninstall.exe" -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'Uninstaller failed' }
+          for ($attempt = 0; $attempt -lt 20 -and (Test-Path "$app/VelCal.exe"); $attempt++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$app/VelCal.exe") { throw 'Uninstaller left standalone' }
+          if (Test-Path "$env:CommonProgramFiles/VST3/VelCal.vst3") { throw 'Uninstaller left VST3' }
+          if (-not (Test-Path "$env:VELCAL_DATA_DIR/profiles/preserve.txt")) { throw 'Uninstaller removed user data' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-installers
+          path: build/installers/*Setup.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      TMPDIR: ${{ github.workspace }}/.tmp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install build dependencies
+        run: |
+          mkdir -p .tmp
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libfontconfig1-dev libfreetype-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev \
+            libxrandr-dev libxrender-dev libxi-dev libfuse2 imagemagick desktop-file-utils \
+            xvfb openbox x11-utils makeself dpkg-dev
+      - name: Configure
+        run: cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DVELCAL_INSTALLED=ON -DCMAKE_INSTALL_PREFIX=/usr
+      - name: Build
+        run: cmake --build build/ci --target velcal_app velcal_plugin_VST3 velcal_core_tests velcal_app_tests velcal_plugin_tests --parallel 2
+      - name: Test
+        run: xvfb-run -a bash tools/run_linux_gui_check.sh ctest --test-dir build/ci --output-on-failure
+      - name: Package
+        run: bash tools/package_unix_installers.sh build/ci
+      - name: Installer smoke tests
+        run: bash tools/test_linux_installers.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-installers
+          path: build/installers/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      TMPDIR: ${{ github.workspace }}/.tmp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Configure
+        run: |
+          mkdir -p .tmp
+          cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DVELCAL_INSTALLED=ON \
+            '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+      - name: Build
+        run: cmake --build build/ci --target velcal_app velcal_plugin_VST3 velcal_au_AU velcal_core_tests velcal_app_tests velcal_plugin_tests velcal_au_tests --parallel 2
+      - name: Test
+        run: ctest --test-dir build/ci --output-on-failure
+      - name: Package
+        run: bash tools/package_unix_installers.sh build/ci
+      - name: Install and validate AU
+        run: |
+          sudo installer -pkg build/installers/VelCal-*-macOS-universal.pkg -target /
+          test -d /Applications/VelCal.app
+          test -d /Library/Audio/Plug-Ins/VST3/VelCal.vst3
+          test -d /Library/Audio/Plug-Ins/Components/VelCal.component
+          killall -9 AudioComponentRegistrar || true
+          auval -v aumi VlC1 Vlcl
+          arch -x86_64 auval -v aumi VlC1 Vlcl
+      - name: Uninstall preserves user data
+        run: |
+          mkdir -p "$HOME/Library/Application Support/VelCal/profiles"
+          touch "$HOME/Library/Application Support/VelCal/profiles/preserve.txt"
+          sudo bash '/Library/Application Support/VelCal/uninstall.command'
+          test ! -d /Applications/VelCal.app
+          test ! -d /Library/Audio/Plug-Ins/Components/VelCal.component
+          test ! -d /Library/Audio/Plug-Ins/VST3/VelCal.vst3
+          test -f "$HOME/Library/Application Support/VelCal/profiles/preserve.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-installers
+          path: build/installers/*.pkg
+          if-no-files-found: error
