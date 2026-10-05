@@ -10,6 +10,9 @@
 
 ## Default Windows build
 
+- Run builds only when the user explicitly requests a build. Requests to change,
+  fix, test, commit, or push code do not by themselves authorize a build, locally
+  or on GitHub. Permission for one build does not authorize future builds.
 - Use `build-portable.bat` in the workspace root as the standard Windows build
   workflow. For agent/terminal runs, use `.\build-portable.bat --no-pause`.
 - This builds Windows x64 Release in `build/windows-portable`, runs the core
@@ -29,6 +32,9 @@
 - `.github/workflows/portable-builds.yml` builds and tests Windows x64, Linux x64,
   and universal macOS (Intel/Apple Silicon) packages. Workflow runs upload build
   artifacts; they do not automatically publish releases.
+- Keep this workflow manual-only (`workflow_dispatch`); do not enable automatic
+  push or pull-request builds. Dispatch it only when the user explicitly requests
+  a GitHub build. A request to push source is not permission to run this workflow.
 - The user has authorized tracking `resources/app-icon.png` for these builds.
 - Use `docs/releases/<version>.md` for release notes and publish only after all
   requested platform jobs pass. Include the Windows-only hardware-testing status
@@ -48,6 +54,9 @@
 - Before an authorized push, review the staged files and keep generated builds,
   downloaded dependencies, caches, app preferences, personal calibration profiles,
   captures, and third-party reference data out of the repository.
+- Verify that an authorized source push will not trigger builds. Until the
+  manual-only workflow is present on the remote, use GitHub Actions' skip-CI
+  commit directive (`[skip ci]`) for source-only pushes.
 
 ## Storage constraint
 

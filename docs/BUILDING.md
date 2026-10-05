@@ -3,6 +3,9 @@
 For downloads and app instructions, start with the [README](../README.md).
 This guide is for building from source and using the development tools.
 
+Agents run local or GitHub builds only on the user's explicit build request;
+permission to change, commit, or push source does not authorize a build.
+
 ## Windows Portable Release
 
 Requirements: CMake 3.22 or newer and Git on PATH, plus existing Visual Studio
@@ -66,6 +69,9 @@ see [architecture.md](architecture.md) and [PLAN.md](PLAN.md).
 
 ## GitHub Builds
 
+The workflow is manual-only (`workflow_dispatch`), not triggered by pushes or
+pull requests. Agents dispatch it only when the user requests a GitHub build.
+
 The [Portable builds workflow](../.github/workflows/portable-builds.yml) builds
 Windows x64 ZIPs, Linux x64 AppImages inside tar.gz archives, and universal macOS
 ZIPs. It runs core and app tests on each OS, checks Linux startup, and verifies both
@@ -77,7 +83,9 @@ configuration flags are recorded in the workflow.
 
 The app regression suite uses fake MIDI outputs for routing, cleanup, failure,
 and blocked-driver tests. Profile/UI tests use a separate directory in the build
-tree. Linux runs the tests under Xvfb; these checks do not replace hardware tests.
+tree. Linux runs the tests and package startup check under Xvfb with Openbox;
+`tools/run_linux_gui_check.sh` waits for window-manager readiness before running
+each command and preserves failures. These checks do not replace hardware tests.
 
 Successful runs upload downloadable artifacts but never automatically publish
 releases. Only Windows has real keyboard/DAW testing; Linux/macOS packages remain

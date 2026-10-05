@@ -85,6 +85,12 @@ Development changes stay local unless the user explicitly requests a GitHub
 update. The initial repository creation/push does not authorize future automatic
 pushes. See `AGENTS.md` for the durable rule.
 
+Local and GitHub builds also require an explicit build request. Changing,
+testing, committing, or pushing source does not by itself authorize a build.
+The portable workflow is manual-only (`workflow_dispatch`), with no push or
+pull-request triggers. Until this workflow change is pushed, source-only pushes
+must use `[skip ci]` to avoid the remote's existing automatic build triggers.
+
 ## Implemented Behavior
 
 ### Calibration Core
@@ -400,6 +406,19 @@ physical keyboard/DAW test or Linux/macOS build has been performed for these
 local changes. Verification was completed locally before the subsequent
 user-authorized source push; no release publication was requested.
 
+The subsequent GitHub run
+[37340016486](https://github.com/SH4DOWSIX/VelCal/actions/runs/37340016486)
+compiled Linux successfully and passed the core tests, but the new app tests
+terminated with X11 `BadAtom` on `X_ChangeProperty` (atom 0) under bare Xvfb.
+JUCE's pinned Linux source looks up `WM_PROTOCOLS` without creating it and uses
+it when creating desktop windows; this points to missing window-manager atoms
+when the confirmation tests open a dialog. The ALSA missing-sequencer warning
+is separate from the fatal X11 error. The local workflow fix installs Openbox
+and x11-utils on the disposable runner, then uses `run_linux_gui_check.sh` to
+wait for window-manager readiness for both tests and package startup. No tests
+are disabled. This fix has not yet been validated by a Linux rerun; no build or
+workflow dispatch was performed because builds require explicit authorization.
+
 ## Known Risks and Limitations
 
 ### Virtual MIDI Endpoint Stall
@@ -555,6 +574,7 @@ Treat failures found here as higher priority than new features.
 - `tests/app_tests.cpp`: fake MIDI output, capture controls, and unsaved-profile regressions
 - `.github/workflows/portable-builds.yml`: three-platform build/test artifacts
 - `tools/package_unix_portable.sh`: Linux AppImage and universal macOS packages
+- `tools/run_linux_gui_check.sh`: window-manager setup for headless Linux checks
 - `tools/package_windows_portable.ps1`: Windows portable folder/ZIP packaging
 - `docs/releases/0.0.1.md`: published release notes and security guidance
 - `docs/architecture.md`: concise architectural overview
@@ -577,7 +597,9 @@ Studio C++ tools and a Windows SDK; it does not install tools or publish anythin
 Use `build-portable.bat --no-pause` for an unattended terminal run.
 
 GitHub Actions uses `.github/workflows/portable-builds.yml` for Windows x64,
-Linux x64 (Ubuntu 22.04 baseline), and universal macOS (11+ target). Windows uses
+Linux x64 (Ubuntu 22.04 baseline), and universal macOS (11+ target). It runs only
+by manual dispatch after an explicit GitHub build request, not on source pushes
+or pull requests. Windows uses
 the existing batch workflow with deterministic release package names. Unix jobs
 build/test in `build/ci` and use `tools/package_unix_portable.sh`. Linux packages
 an AppImage with SHA-256-checked linuxdeploy; macOS verifies both CPU slices and
