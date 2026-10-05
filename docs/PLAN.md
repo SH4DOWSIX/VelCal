@@ -53,7 +53,7 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
-Current release work is installer-first: Windows Setup, Linux DEB/user-local RUN,
+Current release `0.0.2` is installer-first: Windows Setup, Linux DEB/user-local RUN,
 and universal macOS PKG. VST3 is an instrument-style MIDI processor on all three;
 AU is a separate macOS MIDI effect for Logic. Full calibration/editing features
 are shared; DAW plugins omit physical MIDI device/routing selectors. Installed
@@ -77,8 +77,10 @@ binary/ad-hoc signature checks, PKG installation, AU validation and standalone
 startup for arm64 and x86_64, and uninstall with profiles preserved.
 All three platforms have passing native release verification. Their compilation
 inputs are identical; the platform-specific installer fixes were validated in
-separate runs. Release notes link to the exact passing jobs. Publication is the
-remaining release step; real Linux/macOS/Logic testing is still outstanding.
+separate runs. Release notes link to the exact passing jobs. Release `0.0.2`
+is published with all four installers and `SHA256SUMS.txt`; GitHub's uploaded
+asset digests match the locally verified files. Real Linux/macOS/Logic testing
+is still outstanding.
 Native macOS CI preserves only tested bundles/version/licences as an internal
 artifact before packaging. Optional packaging-only retries verify identical
 CMake/C++/test/resource inputs before restoring those binaries. This avoids
@@ -113,6 +115,14 @@ was published on 2026-10-04 from commit
 `30e469c6df8734c4f4d471dfe1d3e9070450d140`. Assets are Windows x64 and universal
 macOS ZIPs, a Linux x64 tar.gz containing an AppImage, and `SHA256SUMS.txt`.
 Only Windows has real keyboard/DAW test evidence; Linux/macOS remain experimental.
+
+[VelCal 0.0.2](https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.2) was published
+on 2026-10-05 from commit `8da59b6cfd1870d2d2de110a6c1bf9206515595a`.
+Assets are Windows x64 Setup, Linux x64 DEB and user-local RUN, universal macOS
+PKG, and `SHA256SUMS.txt`. Standalone and VST3 are included on all platforms;
+macOS also includes the AU MIDI effect. Native CI is passing; real Logic and
+Linux/macOS hardware validation remain outstanding. No paid Apple signing or
+notarization is used.
 
 Development changes stay local unless the user explicitly requests a GitHub
 update. The initial repository creation/push does not authorize future automatic
@@ -589,13 +599,13 @@ user's explicit permission.
 - Installer packaging and manual native GitHub build/test workflows exist.
   Trusted publisher signing/notarization is not provided; macOS uses ad-hoc
   signing only, and paid Apple signing is explicitly outside this release.
-- The published `0.0.1` release has passing platform CI, but only Windows has
+- The published `0.0.2` release has passing platform CI, but only Windows has
   physical test evidence. Fresh P0 validation and the virtual MIDI stall audit
   remain open.
 
 ## Prioritized Next Work
 
-### Active: Installer And AU Release
+### Completed: Installer And AU Release
 
 The user authorized implementation, GitHub push, all three native builds,
 monitoring/fixing failures, and publication after passing checks on 2026-10-05.
@@ -603,7 +613,7 @@ Portable distribution is retired by request; no paid Apple signing/notarization.
 
 1. Windows installer Release and core/app/plugin suites passed locally (3/3).
 2. All native tests and installer checks passed, including both AU architectures.
-3. Publish verified 0.0.2 installers and checksums; no portable assets.
+3. Verified 0.0.2 installers/checksums published; no portable assets.
 4. Obtain real Linux/macOS/Logic testing; CI is not hardware/host evidence.
 5. Continue full Windows calibration/editor/pedal/multiple-instance host checks.
 
@@ -696,7 +706,8 @@ Treat failures found here as higher priority than new features.
 - `tools/package_windows_installer.ps1`: pinned NSIS Windows setup packaging
 - `app/DataPaths.hpp`: installed per-user storage and test overrides
 - `installers/`: platform install/uninstall definitions
-- `docs/releases/0.0.1.md`: published release notes and security guidance
+- `docs/releases/0.0.2.md`: current release notes, native evidence and security guidance
+- `docs/releases/0.0.1.md`: historical portable release notes
 - `docs/architecture.md`: concise architectural overview
 - `README.md`: user-facing introduction, calibration, routing, and profile guide
 - `docs/BUILDING.md`: build workflows, dependencies, and development tools
