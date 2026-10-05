@@ -1,0 +1,7 @@
+This installer uses unmodified NSIS 3.12, including its LZMA compression module.
+The applicable notices are in NSIS.txt. NSIS source is available from:
+https://nsis.sourceforge.io/Download
+https://github.com/kichik/nsis
+
+The pinned compiler bundle used for this build is available from:
+https://github.com/electron-userland/electron-builder-binaries/releases/tag/nsis%402.0.0

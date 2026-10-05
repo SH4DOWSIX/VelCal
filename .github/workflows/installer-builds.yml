@@ -104,8 +104,18 @@ jobs:
           test -d /Library/Audio/Plug-Ins/VST3/VelCal.vst3
           test -d /Library/Audio/Plug-Ins/Components/VelCal.component
           killall -9 AudioComponentRegistrar || true
-          auval -v aumi VlC1 Vlcl
+          arch -arm64 auval -v aumi VlC1 Vlcl
           arch -x86_64 auval -v aumi VlC1 Vlcl
+      - name: Installed standalone startup
+        run: |
+          for architecture in arm64 x86_64; do
+            VELCAL_DATA_DIR="$GITHUB_WORKSPACE/.tmp/mac-user-data" arch -"$architecture" /Applications/VelCal.app/Contents/MacOS/VelCal &
+            pid=$!
+            sleep 4
+            kill -0 "$pid"
+            kill "$pid"
+            wait "$pid" || true
+          done
       - name: Uninstall preserves user data
         run: |
           mkdir -p "$HOME/Library/Application Support/VelCal/profiles"

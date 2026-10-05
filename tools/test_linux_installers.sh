@@ -18,15 +18,15 @@ sudo apt-get remove -y velcal
 test ! -f /usr/bin/VelCal
 test -f "$HOME/.local/share/VelCal/profiles/preserve.txt"
 bash build/installers/VelCal-*-Linux-x64-Install.run -- --standalone-only
-test -x "$HOME/.local/share/velcal/VelCal.AppImage"
+test -x "$HOME/.local/lib/velcal/VelCal.AppImage"
 test ! -d "$HOME/.vst3/VelCal.vst3"
 bash build/installers/VelCal-*-Linux-x64-Install.run -- --vst3-only
 test -d "$HOME/.vst3/VelCal.vst3"
 set +e
-VELCAL_DATA_DIR="$workspace/.tmp/run-user-data" xvfb-run -a bash tools/run_linux_gui_check.sh timeout 8s "$HOME/.local/share/velcal/VelCal.AppImage" --appimage-extract-and-run
+VELCAL_DATA_DIR="$workspace/.tmp/run-user-data" xvfb-run -a bash tools/run_linux_gui_check.sh timeout 8s "$HOME/.local/lib/velcal/VelCal.AppImage" --appimage-extract-and-run
 result=$?
 set -e
 test "$result" -eq 124
-bash "$HOME/.local/share/velcal/uninstall.sh" --uninstall
+bash "$HOME/.local/lib/velcal/uninstall.sh" --uninstall
 test ! -d "$HOME/.vst3/VelCal.vst3"
 test -f "$HOME/.local/share/VelCal/profiles/preserve.txt"

@@ -7,13 +7,13 @@ case "${1:-}" in
   --vst3-only) standalone=0; plugin=1 ;;
   --uninstall)
     rm -f "$HOME/.local/bin/velcal" "$HOME/.local/share/applications/org.velcal.app.desktop" "$HOME/.local/share/icons/hicolor/256x256/apps/org.velcal.app.png"
-    rm -rf "$HOME/.local/share/velcal" "$HOME/.vst3/VelCal.vst3"
+    rm -rf "$HOME/.local/lib/velcal" "$HOME/.vst3/VelCal.vst3"
     echo 'VelCal removed. Personal profiles have been preserved.'
     exit 0 ;;
   *) echo 'Options: --standalone-only, --vst3-only, --uninstall' >&2; exit 1 ;;
 esac
 payload=$(cd "$(dirname "$0")" && pwd)
-app="$HOME/.local/share/velcal"
+app="$HOME/.local/lib/velcal"
 mkdir -p "$app" "$HOME/.local/bin" "$HOME/.vst3"
 cp "$payload/LICENSE" "$app/LICENSE"
 cp -R "$payload/LICENSES" "$app/"

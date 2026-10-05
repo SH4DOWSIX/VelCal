@@ -34,7 +34,8 @@ and DAW validation; Linux/macOS are experimental. See
 1. Run the installer for your operating system and choose standalone and/or
    plugins. Open standalone from your applications menu, or load the plugin
    in your DAW following the [routing guide](docs/INSTALLING.md#daw-routing).
-2. Connect your MIDI keyboard and select it under **MIDI input**.
+2. Connect your keyboard. In standalone select it under **MIDI input**; in a
+   plugin select the input in your DAW instead.
 3. Select **New profile** to start a calibration, or **Open profile** to load one
    you have already saved.
 
@@ -142,7 +143,8 @@ and edits, but not unfinished calibration captures.
   numbers. Keep your keyboard's transpose/octave-shift settings unchanged
   between calibration and playing.
 - This is an early release. There is no undo/redo or individual section removal
-  yet. If routing stops or behaves unexpectedly, disable **Route MIDI** and
+  yet. If routing stops or behaves unexpectedly, bypass the plugin or disable
+  standalone's **Route MIDI**, and
   check your MIDI connections for a feedback loop.
 - Found a problem, especially on Linux or macOS?
   [Open an issue](https://github.com/SH4DOWSIX/VelCal/issues/new) with your OS,

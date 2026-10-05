@@ -31,10 +31,10 @@ chmod +x VelCal-0.0.2-Linux-x64-Install.run
 ./VelCal-0.0.2-Linux-x64-Install.run
 ```
 
-The `.run` installs standalone in `~/.local/share/velcal` with a desktop entry
+The `.run` installs standalone in `~/.local/lib/velcal` with a desktop entry
 and `~/.local/bin/velcal`; VST3 goes into `~/.vst3`. Optional components:
 `./VelCal-0.0.2-Linux-x64-Install.run -- --standalone-only` or `-- --vst3-only`.
-Uninstall with `bash ~/.local/share/velcal/uninstall.sh --uninstall`.
+Uninstall with `bash ~/.local/lib/velcal/uninstall.sh --uninstall`.
 Do not mix both installers. Linux x64 needs glibc 2.35+; the plugin also requires
 your distribution's normal desktop/audio libraries.
 

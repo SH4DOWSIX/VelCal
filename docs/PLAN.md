@@ -61,7 +61,12 @@ user data uses `app/DataPaths.hpp`, with `VELCAL_DATA_DIR` for isolated tests.
 Historical portable milestones below describe earlier work, not the active
 build workflow. Windows Studio One live correction and project recall are now
 user-confirmed. Local installer Release passed all three suites on 2026-10-05.
-Native CI and release publication are in progress, not yet verified.
+The first installer CI run (`37370424953`, commit `455aeae`) passed Windows and
+Linux build/core/app/plugin suites and installation/startup/uninstall checks.
+macOS universal compilation is still in progress. Final packaging adds NSIS
+and makeself notices, separates Linux app files under `~/.local/lib/velcal`
+from profile data, and explicitly tests installed macOS startup for both CPU
+architectures. The final native CI pass and publication remain outstanding.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys

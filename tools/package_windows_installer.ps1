@@ -22,6 +22,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $nsisRoot 'makensis.exe'))) {
     if ($LASTEXITCODE) { throw 'NSIS extraction failed' }
 }
 $env:NSISDIR = $nsisRoot
+Copy-Item -LiteralPath (Join-Path $nsisRoot 'COPYING') -Destination (Join-Path $stage 'LICENSES/NSIS.txt')
+Copy-Item -LiteralPath (Join-Path $workspacePath 'installers/windows/NSIS-SOURCE.txt') -Destination (Join-Path $stage 'LICENSES/NSIS-SOURCE.txt')
 $output = Join-Path $workspacePath "build/installers/VelCal-$version-Windows-x64-Setup.exe"
 & (Join-Path $nsisRoot 'makensis.exe') /V2 "/DVERSION=$version" "/DSTAGE=$stage" "/DOUTPUT=$output" (Join-Path $workspacePath 'installers/windows/VelCal.nsi')
 if ($LASTEXITCODE) { throw 'Installer compilation failed' }
