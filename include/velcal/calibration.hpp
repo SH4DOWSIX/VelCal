@@ -117,6 +117,11 @@ struct VelocityCurvePoint {
     double output{1.0};
 };
 
+std::optional<std::size_t> insertVelocityCurvePoint(
+    std::vector<VelocityCurvePoint>& points, double input, double output);
+void moveVelocityCurvePoint(
+    std::vector<VelocityCurvePoint>& points, std::size_t index, double input, double output);
+
 VelocityMap makeVelocityCurve(
     double curvature,
     std::uint8_t minimumOutput = 1,
@@ -143,6 +148,9 @@ struct Coverage {
     std::size_t highPresses{};
     double score{};
 };
+
+double regionalCoverageScore(
+    const std::array<NoteCalibrationStats, 128>& stats, std::size_t target) noexcept;
 
 struct SegmentAlignment {
     SegmentId segmentId{};

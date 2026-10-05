@@ -29,7 +29,7 @@ cmake -S . -B build\windows-portable -A x64 -DVELCAL_PORTABLE=ON -DVELCAL_BUILD_
 if errorlevel 1 goto failed
 
 echo Building Release...
-cmake --build build\windows-portable --config Release --target velcal_app velcal_core_tests --parallel 2
+cmake --build build\windows-portable --config Release --target velcal_app velcal_core_tests velcal_app_tests --parallel 2
 if errorlevel 1 goto failed
 
 echo Running Release tests...

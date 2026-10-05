@@ -18,7 +18,13 @@ public:
 
     void shutdown() override { mainWindow.reset(); }
 
-    void systemRequestedQuit() override { quit(); }
+    void systemRequestedQuit() override
+    {
+        if (mainWindow)
+            static_cast<MainComponent*>(mainWindow->getContentComponent())->requestClose([this] { quit(); });
+        else
+            quit();
+    }
 
 private:
     class MainWindow final : public juce::DocumentWindow {

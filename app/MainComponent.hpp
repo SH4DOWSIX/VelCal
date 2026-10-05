@@ -17,6 +17,7 @@ class MainComponent final : public juce::Component,
 public:
     MainComponent();
     ~MainComponent() override;
+    void requestClose(std::function<void()> close);
 
     void paint(juce::Graphics& graphics) override;
     void resized() override;
@@ -25,6 +26,7 @@ public:
     void mouseUp(const juce::MouseEvent& event) override;
 
 private:
+    friend struct MainComponentTestAccess;
     void comboBoxChanged(juce::ComboBox* comboBox) override;
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
@@ -50,8 +52,12 @@ private:
     void showCaptureGuide();
     void beginSectionCapture();
     void finishSectionCapture();
+    void updateCaptureControls();
     void chooseProfile();
     void loadProfile(const juce::File& file);
+    void loadProfileConfirmed(const juce::File& file);
+    void confirmDiscardUnsaved(std::function<void()> action);
+    void markProfileDirty();
     void deleteSelectedProfile();
     void deleteProfileConfirmed(const juce::File& file);
     void createNewProfile();
@@ -136,6 +142,8 @@ private:
     bool showingGlobalCurve{};
     bool updatingControls{};
     bool updatingProfileList{};
+    bool profileDirty{};
+    bool discardPromptOpen{};
     std::optional<std::size_t> activeCurvePoint;
     juce::Rectangle<float> keyboardBounds;
     juce::Rectangle<float> keyboardKeyBounds;

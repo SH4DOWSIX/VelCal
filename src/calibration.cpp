@@ -350,6 +350,72 @@ VelocityMap VelocityMap::identity() noexcept
     return map;
 }
 
+std::optional<std::size_t> insertVelocityCurvePoint(
+    std::vector<VelocityCurvePoint>& points, double input, double output)
+{
+    if (points.size() < 2)
+        return std::nullopt;
+    input = std::round(std::clamp(input, 1.0, 127.0));
+    const auto position = std::lower_bound(
+        points.begin(), points.end(), input,
+        [](const auto& point, const double value) { return point.input < value; });
+    const auto index = static_cast<std::size_t>(std::distance(points.begin(), position));
+    if (position != points.end() && position->input == input)
+        return index;
+    if (index == 0 || index == points.size() || points.size() >= 128)
+        return std::nullopt;
+    if (input < points[index - 1].input + 1.0 || input > points[index].input - 1.0)
+        return std::nullopt;
+    output = std::clamp(output, points[index - 1].output, points[index].output);
+    points.insert(position, {input, output});
+    return index;
+}
+
+void moveVelocityCurvePoint(
+    std::vector<VelocityCurvePoint>& points, const std::size_t index,
+    double input, double output)
+{
+    if (index >= points.size())
+        return;
+    input = std::round(std::clamp(input, 1.0, 127.0));
+    output = std::round(std::clamp(output, 1.0, 127.0));
+    if (index == 0)
+        input = 1.0;
+    else if (index + 1 == points.size())
+        input = 127.0;
+    else {
+        const auto minimum = points[index - 1].input + 1.0;
+        const auto maximum = points[index + 1].input - 1.0;
+        input = minimum <= maximum ? std::clamp(input, minimum, maximum) : points[index].input;
+    }
+    if (index > 0)
+        output = std::max(output, points[index - 1].output);
+    if (index + 1 < points.size())
+        output = std::min(output, points[index + 1].output);
+    points[index] = {input, output};
+}
+
+double regionalCoverageScore(
+    const std::array<NoteCalibrationStats, 128>& stats, std::size_t target) noexcept
+{
+    target = std::max<std::size_t>(1, target);
+    std::array<std::size_t, 3> weakest{target, target, target};
+    bool measured = false;
+    for (const auto& note : stats) {
+        if (note.samplesSeen == 0)
+            continue;
+        measured = true;
+        for (std::size_t region = 0; region < weakest.size(); ++region)
+            weakest[region] = std::min(weakest[region], note.samplesUsedByRegion[region]);
+    }
+    if (!measured)
+        return 0.0;
+    double score = 0.0;
+    for (const auto count : weakest)
+        score += static_cast<double>(count) / static_cast<double>(target);
+    return score / 3.0;
+}
+
 std::uint8_t VelocityMap::apply(const std::uint8_t velocity) const noexcept
 {
     return values[velocity];
@@ -502,17 +568,9 @@ CalibrationResult calibrate(
         }
     }
 
-    const auto desired = static_cast<double>(std::max<std::size_t>(1, config.desiredSamplesPerRegion));
-    const auto regionScore = [desired](const std::size_t count) {
-        return std::min(1.0, static_cast<double>(count) / desired);
-    };
-    result.coverage.score = (
-        regionScore(result.coverage.lowPresses)
-        + regionScore(result.coverage.mediumPresses)
-        + regionScore(result.coverage.highPresses)) / 3.0;
-
     for (std::size_t note = 0; note < observations.size(); ++note)
         result.noteMaps[note] = fitMap(observations[note], config, result.noteStats[note]);
+    result.coverage.score = regionalCoverageScore(result.noteStats, config.desiredSamplesPerRegion);
 
     return result;
 }

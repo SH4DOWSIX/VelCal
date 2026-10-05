@@ -116,6 +116,22 @@ if(VELCAL_BUILD_APP)
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
     )
+    if(VELCAL_BUILD_TESTS)
+        juce_add_console_app(velcal_app_tests PRODUCT_NAME "VelCal app tests")
+        juce_generate_juce_header(velcal_app_tests)
+        target_sources(velcal_app_tests PRIVATE
+            tests/app_tests.cpp app/MidiEngine.cpp app/MainComponent.cpp)
+        target_include_directories(velcal_app_tests PRIVATE app)
+        target_compile_features(velcal_app_tests PRIVATE cxx_std_17)
+        target_compile_definitions(velcal_app_tests PRIVATE
+            JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 VELCAL_PORTABLE=0 JUCE_MODAL_LOOPS_PERMITTED=1
+            VELCAL_DEFAULT_PROFILE_DIR="${CMAKE_BINARY_DIR}/app-test-profiles")
+        target_link_libraries(velcal_app_tests PRIVATE velcal_core
+            juce::juce_audio_devices juce::juce_gui_extra
+            juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+        add_test(NAME velcal_app_tests COMMAND velcal_app_tests)
+        set_tests_properties(velcal_app_tests PROPERTIES TIMEOUT 30)
+    endif()
     if(UNIX AND NOT APPLE)
         include(GNUInstallDirs)
         install(TARGETS velcal_app RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")

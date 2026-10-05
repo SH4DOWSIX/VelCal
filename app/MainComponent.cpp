@@ -640,10 +640,13 @@ void MainComponent::selectProfileInList(const juce::File& file)
             break;
         }
     }
-    if (selectedId != 0)
+    if (selectedId != 0) {
+        profileBox.changeItemText(selectedId,
+            profileDisplayName(file) + (profileDirty ? " *" : ""));
         profileBox.setSelectedId(selectedId, juce::dontSendNotification);
+    }
     else if (profile)
-        profileBox.setText(profile->profileName, juce::dontSendNotification);
+        profileBox.setText(juce::String(profile->profileName) + (profileDirty ? " *" : ""), juce::dontSendNotification);
     else
         profileBox.setSelectedId(0, juce::dontSendNotification);
 }
@@ -666,7 +669,7 @@ void MainComponent::comboBoxChanged(juce::ComboBox* comboBox)
         return;
     if (midiEngine.isCapturing()) {
         midiEngine.cancelCapture();
-        captureButton.setButtonText("Start section");
+        updateCaptureControls();
     }
     if (midiEngine.isRouting()) {
         routingToggle.setToggleState(false, juce::dontSendNotification);
@@ -696,6 +699,7 @@ void MainComponent::buttonClicked(juce::Button* button)
         if (profile) {
             profile->noteAdjustments[selectedNote] = 0;
             profile->noteCurveOverrides[selectedNote] = {};
+            markProfileDirty();
             updateEditingControls();
             updateEffectiveMaps();
             repaint();
@@ -705,6 +709,7 @@ void MainComponent::buttonClicked(juce::Button* button)
     else if (button == &resetGlobalButton) {
         if (profile) {
             profile->globalCurve = defaultCurvePresets()[0];
+            markProfileDirty();
             refreshCurvePresets();
             updateEditingControls();
             updateEffectiveMaps();
@@ -715,6 +720,7 @@ void MainComponent::buttonClicked(juce::Button* button)
         if (profile) {
             ensureEditableCurve();
             editableCurveSmooth() = smoothCurveToggle.getToggleState();
+            markProfileDirty();
             updateEffectiveMaps();
             repaint();
         }
@@ -729,7 +735,7 @@ void MainComponent::updateRouting()
 {
     if (midiEngine.isCapturing()) {
         midiEngine.cancelCapture();
-        captureButton.setButtonText("Start section");
+        updateCaptureControls();
     }
     if (!routingToggle.getToggleState()) {
         midiEngine.stopRouting();
@@ -853,10 +859,7 @@ void MainComponent::beginSectionCapture()
     }
 
     captureStartMessageCount = midiEngine.getActivity().messagesReceived;
-    captureButton.setButtonText("Finish section");
-    keyGroupBox.setEnabled(false);
-    midiInputBox.setEnabled(false);
-    routingToggle.setEnabled(false);
+    updateCaptureControls();
     selectedNoteLabel.setText("Calibration capture", juce::dontSendNotification);
     statusLabel.setText("Start with soft bar presses", juce::dontSendNotification);
 }
@@ -864,10 +867,7 @@ void MainComponent::beginSectionCapture()
 void MainComponent::finishSectionCapture()
 {
     const auto events = midiEngine.finishCapture();
-    captureButton.setButtonText("Start section");
-    keyGroupBox.setEnabled(true);
-    midiInputBox.setEnabled(true);
-    routingToggle.setEnabled(true);
+    updateCaptureControls();
 
     velcal::SegmentId segmentId = 1;
     if (profile) {
@@ -903,6 +903,7 @@ void MainComponent::finishSectionCapture()
     profile->presses.insert(
         profile->presses.end(), analysis.presses.begin(), analysis.presses.end());
     profile->generated = velcal::calibrate(profile->presses, profile->settings);
+    markProfileDirty();
     updateEffectiveMaps();
     selectedNote = analysis.lowestNote;
     updateEditingControls();
@@ -921,10 +922,30 @@ void MainComponent::finishSectionCapture()
     repaint();
 }
 
+void MainComponent::updateCaptureControls()
+{
+    const auto capturing = midiEngine.isCapturing();
+    captureButton.setButtonText(capturing ? "Finish section" : "Start section");
+    keyGroupBox.setEnabled(!capturing);
+    midiInputBox.setEnabled(!capturing);
+    routingToggle.setEnabled(!capturing);
+}
+
 void MainComponent::timerCallback()
 {
     const auto activity = midiEngine.getActivity();
+    if (activity.outputError.isNotEmpty()) {
+        midiEngine.stopRouting();
+        routingToggle.setToggleState(false, juce::dontSendNotification);
+        statusLabel.setText(activity.outputError, juce::dontSendNotification);
+        return;
+    }
+    if (activity.outputOpening) {
+        statusLabel.setText("Opening MIDI output", juce::dontSendNotification);
+        return;
+    }
     if (activity.safetyTripped) {
+        midiEngine.stopRouting();
         routingToggle.setToggleState(false, juce::dontSendNotification);
         statusLabel.setText(
             "Routing stopped: abnormal MIDI traffic detected",
@@ -977,8 +998,22 @@ void MainComponent::chooseProfile()
 
 void MainComponent::loadProfile(const juce::File& file)
 {
+    selectProfileInList(profileFile);
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    confirmDiscardUnsaved([safeThis, file] {
+        if (safeThis != nullptr)
+            safeThis->loadProfileConfirmed(file);
+    });
+}
+
+void MainComponent::loadProfileConfirmed(const juce::File& file)
+{
     try {
         profile = velcal::loadProfile(juceFilePath(file));
+        profileDirty = false;
+        if (midiEngine.isCapturing())
+            midiEngine.cancelCapture();
+        updateCaptureControls();
         const auto firstMeasured = std::find_if(
             profile->generated.noteStats.begin(), profile->generated.noteStats.end(),
             [](const auto& stats) { return stats.samplesUsed != 0; });
@@ -1041,9 +1076,11 @@ void MainComponent::deleteProfileConfirmed(const juce::File& file)
 
     if (file == profileFile) {
         profile.reset();
+        profileDirty = false;
         profileFile = juce::File{};
         selectedNote = 60;
         midiEngine.stopRouting();
+        updateCaptureControls();
         MidiEngine::MapBank identity;
         for (auto& map : identity)
             map = velcal::VelocityMap::identity();
@@ -1060,28 +1097,56 @@ void MainComponent::deleteProfileConfirmed(const juce::File& file)
 
 void MainComponent::createNewProfile()
 {
-    if (!profile || profile->presses.empty()) {
-        replaceWithNewProfile();
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    confirmDiscardUnsaved([safeThis] {
+        if (safeThis != nullptr)
+            safeThis->replaceWithNewProfile();
+    });
+}
+
+void MainComponent::requestClose(std::function<void()> close)
+{
+    confirmDiscardUnsaved(std::move(close));
+}
+
+void MainComponent::markProfileDirty()
+{
+    profileDirty = true;
+    selectProfileInList(profileFile);
+}
+
+void MainComponent::confirmDiscardUnsaved(std::function<void()> action)
+{
+    if (discardPromptOpen)
+        return;
+    if (!profileDirty && !midiEngine.isCapturing()) {
+        action();
         return;
     }
-
+    discardPromptOpen = true;
     const juce::Component::SafePointer<MainComponent> safeThis(this);
     juce::AlertWindow::showOkCancelBox(
         juce::MessageBoxIconType::QuestionIcon,
-        "Create a new profile?",
-        "The measurements currently in memory will be discarded. The saved profile file will not be changed.",
-        "Create new",
+        "Discard unsaved changes?",
+        midiEngine.isCapturing()
+            ? "The current capture will be discarded. Cancel to finish the section and save your profile."
+            : "This profile has unsaved changes. Cancel to save your profile before continuing.",
+        "Discard",
         "Cancel",
         this,
-        juce::ModalCallbackFunction::create([safeThis](const int result) {
-            if (result != 0 && safeThis != nullptr)
-                safeThis->replaceWithNewProfile();
+        juce::ModalCallbackFunction::create([safeThis, action = std::move(action)](const int result) {
+            if (safeThis == nullptr)
+                return;
+            safeThis->discardPromptOpen = false;
+            if (result != 0)
+                action();
         }));
 }
 
 void MainComponent::replaceWithNewProfile()
 {
     midiEngine.stopRouting();
+    updateCaptureControls();
     routingToggle.setToggleState(false, juce::dontSendNotification);
 
     velcal::CalibrationProfile newProfile;
@@ -1097,6 +1162,7 @@ void MainComponent::replaceWithNewProfile()
     newProfile.generated = velcal::calibrate(newProfile.presses, newProfile.settings);
 
     profile = std::move(newProfile);
+    profileDirty = false;
     profileFile = juce::File{};
     refreshProfileList();
     saveAppState();
@@ -1131,12 +1197,14 @@ void MainComponent::clearMeasurements()
 void MainComponent::clearMeasurementsConfirmed()
 {
     midiEngine.stopRouting();
+    updateCaptureControls();
     routingToggle.setToggleState(false, juce::dontSendNotification);
     profile->presses.clear();
     profile->generated = velcal::calibrate(profile->presses, profile->settings);
     profile->noteAdjustments.fill(0);
     profile->noteCurveOverrides.fill({});
     profile->globalCurve = defaultCurvePresets()[0];
+    markProfileDirty();
     selectedNote = 60;
     refreshCurvePresets();
     updateEditingControls();
@@ -1180,6 +1248,7 @@ void MainComponent::writeProfile(const juce::File& file)
             *profile,
             juceFilePath(file));
         profileFile = file;
+        profileDirty = false;
         refreshProfileList();
         saveAppState();
         statusLabel.setText("Profile saved", juce::dontSendNotification);
@@ -1264,6 +1333,7 @@ void MainComponent::applySelectedCurvePreset()
         if (index < profile->userGlobalPresets.size())
             profile->globalCurve = profile->userGlobalPresets[index];
     }
+    markProfileDirty();
     updateEditingControls();
     updateEffectiveMaps();
     updateLabels();
@@ -1295,6 +1365,7 @@ void MainComponent::saveCurvePreset()
             preset.name = name.toStdString();
             safeThis->profile->globalCurve = preset;
             safeThis->profile->userGlobalPresets.push_back(preset);
+            safeThis->markProfileDirty();
             safeThis->refreshCurvePresets();
             safeThis->updateEditingControls();
             safeThis->repaint();
@@ -1335,6 +1406,7 @@ void MainComponent::sliderValueChanged(juce::Slider* slider)
         globalPresetBox.setText("Custom", juce::dontSendNotification);
         updatingControls = false;
     }
+    markProfileDirty();
     updateEffectiveMaps();
     if (showingGlobalCurve) {
         selectedNoteLabel.setText(
@@ -1378,6 +1450,8 @@ void MainComponent::ensureEditableCurve()
         profile->noteAdjustments[selectedNote] = 0;
         updateEditingControls();
     }
+    markProfileDirty();
+    updateEffectiveMaps();
 }
 
 std::vector<velcal::VelocityCurvePoint> MainComponent::sampledCurrentCurve() const
@@ -1729,7 +1803,7 @@ void MainComponent::paint(juce::Graphics& graphics)
             juce::String(coverage.lowPresses + coverage.mediumPresses + coverage.highPresses),
             juce::Colour(green));
         sidebar.removeFromTop(12.0f);
-        paintMetric(graphics, sidebar.removeFromTop(72.0f), "COVERAGE",
+        paintMetric(graphics, sidebar.removeFromTop(72.0f), "SAMPLED KEY COVERAGE",
             juce::String(static_cast<int>(std::lround(coverage.score * 100.0))) + "%",
             coverage.score >= 0.8 ? juce::Colour(green) : juce::Colour(amber));
         sidebar.removeFromTop(12.0f);
@@ -1975,6 +2049,7 @@ void MainComponent::mouseDown(const juce::MouseEvent& event)
         if (event.mods.isRightButtonDown()) {
             if (nearest && *nearest != 0 && *nearest + 1 < points.size()) {
                 points.erase(points.begin() + static_cast<std::ptrdiff_t>(*nearest));
+                markProfileDirty();
                 updateEffectiveMaps();
                 repaint();
             }
@@ -1982,17 +2057,11 @@ void MainComponent::mouseDown(const juce::MouseEvent& event)
         }
 
         if (!nearest) {
-            const auto position = std::lower_bound(
-                points.begin(), points.end(), input,
-                [](const auto& point, const double value) { return point.input < value; });
-            const auto index = static_cast<std::size_t>(std::distance(points.begin(), position));
-            if (index == 0 || index == points.size())
-                nearest = index == 0 ? 0 : points.size() - 1;
-            else {
-                const auto constrainedOutput = std::clamp(
-                    output, points[index - 1].output, points[index].output);
-                points.insert(position, {input, constrainedOutput});
-                nearest = index;
+            const auto previousSize = points.size();
+            nearest = velcal::insertVelocityCurvePoint(points, input, output);
+            if (points.size() != previousSize) {
+                markProfileDirty();
+                updateEffectiveMaps();
             }
         }
         activeCurvePoint = nearest;
@@ -2025,17 +2094,13 @@ void MainComponent::mouseDrag(const juce::MouseEvent& event)
     auto output = std::round(std::clamp(
         1.0 + 126.0 * (plot.getBottom() - event.position.y) / plot.getHeight(),
         1.0, 127.0));
-    if (index == 0)
-        input = 1.0;
-    else if (index + 1 == points.size())
-        input = 127.0;
-    else
-        input = std::clamp(input, points[index - 1].input + 1.0, points[index + 1].input - 1.0);
-    if (index > 0)
-        output = std::max(output, points[index - 1].output);
-    if (index + 1 < points.size())
-        output = std::min(output, points[index + 1].output);
-    points[index] = {input, output};
+    const auto previous = points[index];
+    velcal::moveVelocityCurvePoint(points, index, input, output);
+    if (points[index].input == previous.input && points[index].output == previous.output) {
+        repaint();
+        return;
+    }
+    markProfileDirty();
     if (showingGlobalCurve) {
         profile->globalCurve.name = "Custom";
         globalPresetBox.setSelectedId(0, juce::dontSendNotification);

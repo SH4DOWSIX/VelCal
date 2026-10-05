@@ -15,7 +15,7 @@ Double-click `build-portable.bat` in the repository root, or run:
 ```
 
 This configures an x64 Release build in `build/windows-portable`, builds the app
-and core tests, runs CTest, and creates a fresh portable folder and ZIP under
+and core/app tests, runs CTest, and creates a fresh portable folder and ZIP under
 `build/portable`. The MSVC runtime is linked statically.
 
 Packages contain the executable, licence, dependency licence notices, and an
@@ -68,12 +68,16 @@ see [architecture.md](architecture.md) and [PLAN.md](PLAN.md).
 
 The [Portable builds workflow](../.github/workflows/portable-builds.yml) builds
 Windows x64 ZIPs, Linux x64 AppImages inside tar.gz archives, and universal macOS
-ZIPs. It runs core tests on each OS, checks Linux startup, and verifies both
+ZIPs. It runs core and app tests on each OS, checks Linux startup, and verifies both
 macOS CPU slices and the ad-hoc bundle signature.
 
 Windows uses the existing batch workflow. Linux/macOS use `build/ci` and
 `tools/package_unix_portable.sh`. Exact runners, platform dependencies, and
 configuration flags are recorded in the workflow.
+
+The app regression suite uses fake MIDI outputs for routing, cleanup, failure,
+and blocked-driver tests. Profile/UI tests use a separate directory in the build
+tree. Linux runs the tests under Xvfb; these checks do not replace hardware tests.
 
 Successful runs upload downloadable artifacts but never automatically publish
 releases. Only Windows has real keyboard/DAW testing; Linux/macOS packages remain

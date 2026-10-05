@@ -5,9 +5,16 @@
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace {
 
@@ -324,6 +331,110 @@ void globalVelocityCurvesAreMonotonic()
         "editable curve passes through its control points");
 }
 
+void crowdedCurvePointsRemainEditable()
+{
+    std::vector<velcal::VelocityCurvePoint> points{
+        {1, 1}, {63, 40}, {64, 90}, {127, 127}};
+    const auto index = velcal::insertVelocityCurvePoint(points, 64, 10);
+    expect(index && *index == 2 && points.size() == 4,
+        "clicking an existing input selects it without inserting a duplicate");
+    if (index)
+        velcal::moveVelocityCurvePoint(points, *index, 60, 10);
+    expect(points[2].input == 64 && points[2].output >= points[1].output,
+        "moving an adjacent point preserves ordering");
+    std::vector<velcal::VelocityCurvePoint> fractional{
+        {1, 1}, {63.5, 40}, {64, 60}, {64.5, 90}, {127, 127}};
+    velcal::moveVelocityCurvePoint(fractional, 2, 80, 75);
+    expect(fractional[2].input == 64 && fractional[2].output == 75,
+        "crowded fractional profile points can move vertically without reversed clamp bounds");
+    std::vector<velcal::VelocityCurvePoint> dense;
+    for (int input = 1; input <= 127; ++input)
+        dense.push_back({static_cast<double>(input), static_cast<double>(input)});
+    for (int input = 1; input <= 127; ++input) {
+        const auto selected = velcal::insertVelocityCurvePoint(dense, input, 127 - input);
+        expect(selected && dense.size() == 127, "a fully populated curve never grows duplicate points");
+    }
+    expect(velcal::makeVelocityCurve(points, true).isMonotonic(),
+        "edited crowded curves still generate monotonic maps");
+}
+
+void coverageRequiresEachSampledKeyAndRejectsOutliers()
+{
+    std::vector<velcal::CalibrationPress> presses;
+    for (int section = 0; section < 2; ++section) {
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            for (const auto reference : {24, 64, 104}) {
+                auto press = makePress(presses.size() + 1, reference, reference);
+                press.segmentId = static_cast<velcal::SegmentId>(section + 1);
+                if (section == 1)
+                    for (auto& note : press.notes)
+                        note.note = static_cast<std::uint8_t>(note.note + 12);
+                presses.push_back(std::move(press));
+            }
+        }
+    }
+    auto result = velcal::calibrate(presses);
+    expect(result.coverage.lowPresses == 8 && result.coverage.mediumPresses == 8
+            && result.coverage.highPresses == 8,
+        "two partial sections still retain their total press counts");
+    expect(std::abs(result.coverage.score - 0.5) < 0.001,
+        "two half-sampled sections report 50 percent, not 100 percent");
+    auto complete = presses;
+    complete.insert(complete.end(), presses.begin(), presses.end());
+    result = velcal::calibrate(complete);
+    expect(result.coverage.score == 1.0, "all sampled keys reaching 8/8/8 reports full coverage");
+    complete[2].notes[4].velocity = 1;
+    result = velcal::calibrate(complete);
+    expect(result.noteStats[67].samplesUsedByRegion[2] == 7 && result.coverage.score < 1.0,
+        "a rejected firm outlier prevents full coverage even with enough total presses");
+}
+
+void failedProfileSavesPreservePreviousFile()
+{
+    const auto directory = std::filesystem::current_path() / "velcal-atomic-save-test";
+    std::filesystem::create_directory(directory);
+    const auto path = directory / "profile.velcal.json";
+    velcal::CalibrationProfile profile;
+    profile.profileName = "Original";
+    profile.generated = velcal::calibrate({});
+    velcal::saveProfile(profile, path);
+    auto invalid = profile;
+    invalid.profileName = std::string(1, static_cast<char>(0xff));
+    bool failed = false;
+    try { velcal::saveProfile(invalid, path); }
+    catch (const std::exception&) { failed = true; }
+    expect(failed && velcal::loadProfile(path).profileName == "Original",
+        "serialization failure leaves the previously saved profile intact");
+#if defined(_WIN32)
+    const auto handle = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    expect(handle != INVALID_HANDLE_VALUE, "test can lock the destination against replacement");
+    if (handle != INVALID_HANDLE_VALUE) {
+        profile.profileName = "Replacement";
+        failed = false;
+        try { velcal::saveProfile(profile, path); }
+        catch (const std::exception&) { failed = true; }
+        CloseHandle(handle);
+        expect(failed && velcal::loadProfile(path).profileName == "Original",
+            "replacement failure leaves the old file readable and unchanged");
+    }
+#endif
+    profile.profileName = "Replacement";
+    profile.generated.noteStats[60].samplesSeen = 12;
+    profile.generated.noteStats[60].samplesUsed = 12;
+    profile.generated.noteStats[60].samplesUsedByRegion = {4, 4, 4};
+    profile.generated.coverage.score = 1.0;
+    velcal::saveProfile(profile, path);
+    expect(velcal::loadProfile(path).profileName == "Replacement",
+        "a successful save replaces an existing file");
+    expect(velcal::loadProfile(path).generated.coverage.score == 0.5,
+        "loading schema-4 profiles refreshes stale total-only coverage without changing maps");
+    expect(std::distance(std::filesystem::directory_iterator(directory),
+               std::filesystem::directory_iterator{}) == 1,
+        "failed and successful saves leave no temporary profile files");
+    std::filesystem::remove_all(directory);
+}
+
 } // namespace
 
 int main()
@@ -336,6 +447,9 @@ int main()
     overlappingShortSectionsAreAligned();
     profileRoundTripPreservesMeasurementsAndMaps();
     globalVelocityCurvesAreMonotonic();
+    crowdedCurvePointsRemainEditable();
+    coverageRequiresEachSampledKeyAndRejectsOutliers();
+    failedProfileSavesPreservePreviousFile();
 
     if (failures == 0) {
         std::cout << "All VelCal core tests passed.\n";

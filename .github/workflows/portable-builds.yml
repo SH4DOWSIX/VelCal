@@ -45,9 +45,9 @@ jobs:
       - name: Configure
         run: cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DVELCAL_PORTABLE=ON -DCMAKE_INSTALL_PREFIX=/usr
       - name: Build
-        run: cmake --build build/ci --target velcal_app velcal_core_tests --parallel 2
+        run: cmake --build build/ci --target velcal_app velcal_core_tests velcal_app_tests --parallel 2
       - name: Test
-        run: ctest --test-dir build/ci --output-on-failure
+        run: xvfb-run -a ctest --test-dir build/ci --output-on-failure
       - name: Package
         run: bash tools/package_unix_portable.sh build/ci
       - name: Check Linux package startup
@@ -76,7 +76,7 @@ jobs:
           cmake -S . -B build/ci -DCMAKE_BUILD_TYPE=Release -DVELCAL_PORTABLE=ON \
             '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64' -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
       - name: Build
-        run: cmake --build build/ci --target velcal_app velcal_core_tests --parallel 2
+        run: cmake --build build/ci --target velcal_app velcal_core_tests velcal_app_tests --parallel 2
       - name: Test
         run: ctest --test-dir build/ci --output-on-failure
       - name: Package

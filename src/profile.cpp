@@ -3,13 +3,58 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <fstream>
 #include <stdexcept>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace velcal {
 namespace {
 
 using Json = nlohmann::json;
+
+void writeProfileAtomically(const std::filesystem::path& path, const std::string& contents)
+{
+    const auto destination = std::filesystem::absolute(path);
+    std::filesystem::create_directories(destination.parent_path());
+    static std::atomic<std::uint64_t> sequence{0};
+    std::filesystem::path temporaryDirectory;
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        const auto token = std::chrono::steady_clock::now().time_since_epoch().count();
+        temporaryDirectory = destination;
+        temporaryDirectory += ".tmp-" + std::to_string(token) + "-" + std::to_string(sequence++);
+        if (std::filesystem::create_directory(temporaryDirectory))
+            break;
+        temporaryDirectory.clear();
+    }
+    if (temporaryDirectory.empty())
+        throw std::runtime_error("could not create temporary profile directory");
+    struct Cleanup {
+        std::filesystem::path directory;
+        ~Cleanup() { std::error_code ignored; std::filesystem::remove_all(directory, ignored); }
+    } cleanup{temporaryDirectory};
+    const auto temporaryFile = temporaryDirectory / "profile.json";
+    std::ofstream output(temporaryFile, std::ios::binary);
+    if (!output)
+        throw std::runtime_error("could not create temporary profile file");
+    output << contents;
+    output.close();
+    if (!output)
+        throw std::runtime_error("could not finish writing profile file; the previous profile is unchanged");
+#if defined(_WIN32)
+    if (!MoveFileExW(temporaryFile.c_str(), destination.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        throw std::runtime_error("could not replace profile file; the previous profile is unchanged");
+#else
+    std::filesystem::rename(temporaryFile, destination);
+#endif
+}
 
 const char* keyGroupName(const KeyGroup group)
 {
@@ -322,14 +367,7 @@ void saveProfile(const CalibrationProfile& profile, const std::filesystem::path&
         });
     }
 
-    if (!path.parent_path().empty())
-        std::filesystem::create_directories(path.parent_path());
-    std::ofstream output(path);
-    if (!output)
-        throw std::runtime_error("could not create profile file");
-    output << std::setw(2) << json << '\n';
-    if (!output.good())
-        throw std::runtime_error("could not finish writing profile file");
+    writeProfileAtomically(path, json.dump(2) + '\n');
 }
 
 CalibrationProfile loadProfile(const std::filesystem::path& path)
@@ -364,6 +402,8 @@ CalibrationProfile loadProfile(const std::filesystem::path& path)
     profile.generated = readResult(json.at("generated"));
     if (sourceSchemaVersion < 4)
         profile.generated = calibrate(profile.presses, profile.settings);
+    profile.generated.coverage.score = regionalCoverageScore(
+        profile.generated.noteStats, profile.settings.desiredSamplesPerRegion);
     if (json.contains("noteAdjustments")) {
         const auto adjustments = json.at("noteAdjustments").get<std::array<int, 128>>();
         for (const auto adjustment : adjustments) {

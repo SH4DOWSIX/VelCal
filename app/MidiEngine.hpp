@@ -8,6 +8,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -17,6 +18,13 @@ class MidiEngine final : private juce::MidiInputCallback {
 public:
     using MapBank = std::array<velcal::VelocityMap, 128>;
 
+    class OutputDevice {
+    public:
+        virtual ~OutputDevice() = default;
+        virtual void send(const juce::MidiMessage& message) = 0;
+    };
+    using OutputFactory = std::function<std::unique_ptr<OutputDevice>(const juce::String&, bool)>;
+
     struct Activity {
         std::uint64_t messagesReceived{};
         std::uint64_t messagesSent{};
@@ -25,9 +33,11 @@ public:
         std::uint8_t lastCorrectedVelocity{};
         bool safetyTripped{};
         std::uint64_t messagesDropped{};
+        bool outputOpening{};
+        juce::String outputError;
     };
 
-    MidiEngine();
+    explicit MidiEngine(OutputFactory factory = {});
     ~MidiEngine() override;
 
     void setMaps(const MapBank& maps);
@@ -43,27 +53,28 @@ public:
     void stopRouting();
     bool isRouting() const noexcept;
     bool isCapturing() const noexcept;
-    Activity getActivity() const noexcept;
+    Activity getActivity() const;
 
 private:
     void handleIncomingMidiMessage(
         juce::MidiInput* source,
         const juce::MidiMessage& message) override;
-    void outputWorkerLoop();
+    struct OutputSession;
+    bool startOutput(const juce::String& identifier, bool createVirtual, juce::String& error);
+    static void outputWorkerLoop(
+        const std::shared_ptr<OutputSession>& session, const OutputFactory& factory,
+        const juce::String& identifier, bool createVirtual);
     void tripRoutingSafety();
+    friend struct MidiEngineTestAccess;
 
     std::unique_ptr<juce::MidiInput> input;
-    std::shared_ptr<juce::MidiOutput> output;
+    OutputFactory outputFactory;
+    std::shared_ptr<OutputSession> outputSession;
+    std::shared_ptr<OutputSession> stalledOutput;
     std::shared_ptr<const MapBank> maps;
-    std::atomic<bool> routing{false};
     std::atomic<bool> capturing{false};
-    std::atomic<bool> workerExit{false};
-    std::atomic<bool> routingSafetyTripped{false};
     std::mutex captureMutex;
     std::vector<velcal::NoteOn> capturedEvents;
-    std::mutex outputQueueMutex;
-    std::condition_variable outputQueueReady;
-    std::deque<juce::MidiMessage> outputQueue;
     std::thread outputWorker;
     std::uint64_t rateWindowStartedMs{};
     std::size_t messagesInRateWindow{};

@@ -1,6 +1,6 @@
 # VelCal Project Handoff and Plan
 
-Last updated: 2026-10-04
+Last updated: 2026-10-05
 
 This is the durable starting point for a new VelCal development conversation.
 Read `AGENTS.md` first for workspace rules, then this file before proposing or
@@ -154,6 +154,8 @@ Potential future modes have been discussed but are not implemented:
 - Finish Section infers the range, retains accepted/rejected measurements,
   recalculates maps, and updates the profile in memory.
 - Save Profile is explicit; a completed capture is not automatically written.
+- Every capture exit restores the input, key-group, routing, and capture-button
+  controls, including output changes, New Profile, Clear Data, and deletion.
 - New Profile creates an unsaved identity profile.
 - Clear Data confirms, clears measurements/manual note curves, and resets the
   global curve. A loaded file is unchanged until Save Profile is selected.
@@ -161,6 +163,13 @@ Potential future modes have been discussed but are not implemented:
 ### Profiles and Editing
 
 - Profiles are JSON files ending in `.velcal.json`.
+- Saves serialize completely and write/close a temporary file beside the
+  destination before replacing it atomically. Failed serialization, writing,
+  or replacement leaves the previous profile intact. This is not a guarantee
+  against power loss or failing storage hardware.
+- An asterisk marks unsaved profile changes. Closing, creating a new profile,
+  or loading another profile asks before discarding edits or an active capture.
+  Cancel keeps the current work; Save Profile remains explicit.
 - The header profile dropdown lists local profiles from `profiles/*.velcal.json`.
 - The app remembers the last loaded profile and restores it on startup when the
   file still exists.
@@ -178,6 +187,9 @@ Potential future modes have been discussed but are not implemented:
 - Right-click removes an interior point.
 - Endpoint input coordinates remain anchored at 1 and 127.
 - Point output and ordering are constrained so curves remain monotonic.
+- Clicking at an existing input selects its point instead of inserting a
+  duplicate. Crowded points are protected against reversed drag bounds;
+  fractional points in existing profiles remain supported.
 - The Smooth toggle switches between monotonic cubic interpolation and straight
   line segments.
 - While dragging, a transient bubble displays integer input/output coordinates.
@@ -224,6 +236,14 @@ Keyboard status display:
 - Red: fully sampled key is louder and is being reduced
 - Bright magenta outline: selected key
 
+The sampled-key coverage percentage uses the weakest post-outlier count in
+each velocity region across measured keys. It reaches 100% only when all
+sampled keys meet their regional target; it does not mean all 88 keys have been
+captured or that disconnected sections have been aligned. Loading existing
+schema-4 profiles refreshes this percentage from stored per-note statistics
+without changing their maps. The profile schema and fitting algorithm versions
+remain unchanged.
+
 The legend is visible under the keyboard. Curve graphs show `ppp` through `fff`
 on the output axis and `0, 32, 64, 96, 127` on the input axis. Internally Note On
 velocity 0 is not used because it conventionally means Note Off.
@@ -250,6 +270,16 @@ paths remain absolute. Normal development builds keep their existing storage.
   through unchanged.
 - Map banks are immutable snapshots swapped atomically.
 - MIDI output sends run on a dedicated worker rather than the input callback.
+- Output opening and destruction also run on the worker. Opening is reported
+  in the UI; failed or unresponsive output operations stop routing and report
+  an error. The UI polls for operations exceeding two seconds.
+- On manual stop or safety cutoff, the output worker releases sustain,
+  sostenuto, and hold-2, then sends All Notes Off and All Sound Off on channels
+  used by routed notes/pedals. Cleanup follows any already in-flight send.
+- Output shutdown waits at most 250 ms for its worker. A blocked driver retains
+  its own session without references to MidiEngine or the UI; it completes
+  cleanup if it recovers. A new output session cannot start while that old
+  session is still busy. Cleanup cannot reach a permanently blocked driver.
 - The output queue is bounded at 512 messages.
 - Routing stops above 1,000 incoming messages/second or when the queue backs up.
 - Activity reports raw and corrected velocity for the latest note.
@@ -352,6 +382,24 @@ of README files or personal profiles/preferences. GitHub's uploaded SHA-256
 digests matched the local release assets before publication. These automated
 checks do not establish Linux/macOS MIDI hardware, DAW, or visual correctness.
 
+Local audit-fix verification on 2026-10-05: the standard portable Release build
+passed both CTest suites (2/2) and generated a new Windows folder/ZIP. Core
+regressions cover crowded/fractional curve points, per-key regional coverage,
+outlier-dependent readiness, stale cached coverage, and preservation of an
+existing profile during failed serialization/replacement. App regressions use
+fake outputs for message ordering and passthrough, mapped velocities, normal
+and safety-triggered note cleanup, bounded queue overflow, blocked open/send/
+close calls, delayed cleanup after engine destruction, watchdog errors, and
+restarting without delivering stale messages to a new output. UI tests cover
+capture-control restoration and Cancel/Discard behavior for closing or switching
+unsaved profiles, curve-only edits, and clearing the dirty marker after saving.
+The tests use their own build-tree profile paths and do not open real MIDI ports.
+The dialog test initially needed a message-loop pump before inspecting JUCE's
+asynchronously created confirmation; the corrected suite passes. No fresh
+physical keyboard/DAW test or Linux/macOS build has been performed for these
+local changes. Verification was completed locally before the subsequent
+user-authorized source push; no release publication was requested.
+
 ## Known Risks and Limitations
 
 ### Virtual MIDI Endpoint Stall
@@ -363,7 +411,11 @@ MIDI, display, driver, or application-hang event. A feedback flood or blocking
 virtual-driver call was suspected.
 
 The affected endpoint was temporarily blocked, then re-enabled at the user's
-request. The current safeguards remain, but the exact scenario has not yet been
+request. Output lifecycle calls now run on an independently owned worker session,
+shutdown has a bounded wait, and simulated blocked-driver regressions pass.
+Input-device opening/stopping still uses JUCE synchronously. These changes cannot
+repair a malfunctioning OS driver or prove the cause of the original PC freeze.
+The exact physical scenario has not yet been
 deliberately retested and proven resolved. When testing it, record:
 
 - exact physical input and virtual output names
@@ -406,7 +458,8 @@ user's explicit permission.
 - There is no section manager for reviewing, deleting, or recapturing one bad
   section after it has been added.
 - There is no undo/redo for curve editing.
-- There is no dirty/unsaved indicator or close confirmation.
+- Unsaved edits are marked and confirmed before closing or replacing a profile;
+  there is still no Save As or save-and-continue option in that confirmation.
 - Window state is not persisted.
 - User-created global presets are profile-local, not yet shared across profiles.
 - Quick/Recommended/Thorough capture modes are not implemented.
@@ -453,8 +506,7 @@ Treat failures found here as higher priority than new features.
 ### P2: Editing and Profile UX
 
 1. Add undo/redo for curve points, smoothing, trims, and preset application.
-2. Add dirty-state indication, close confirmation, Save As, and deliberate
-   overwrite behavior.
+2. Add Save As and a save-and-continue option to the unsaved-change confirmation.
 3. Decide whether user presets should be global app data or profile-local. Any
    global preset store must remain under the project/user-selected `D:` location
    for this workspace.
@@ -471,8 +523,8 @@ Treat failures found here as higher priority than new features.
    Windows workflow uses user-created cables such as loopMIDI.
 4. Build and test CoreMIDI virtual output on macOS.
 5. Build and test ALSA sequencer virtual output on Linux.
-6. Add automated tests around routing order, passthrough, queue overflow, and
-   feedback cutoff where practical.
+6. Extend the fake-output routing regressions with real hardware/DAW evidence
+   and device hot-plug cases.
 
 ### P4: Release
 
@@ -500,6 +552,7 @@ Treat failures found here as higher priority than new features.
 - `tools/windows_capture.cpp`: older Windows console capture/instrumentation tool
 - `tools/analyze_capture.cpp`: offline CSV reprocessing and validation
 - `tests/calibration_tests.cpp`: core regression suite
+- `tests/app_tests.cpp`: fake MIDI output, capture controls, and unsaved-profile regressions
 - `.github/workflows/portable-builds.yml`: three-platform build/test artifacts
 - `tools/package_unix_portable.sh`: Linux AppImage and universal macOS packages
 - `tools/package_windows_portable.ps1`: Windows portable folder/ZIP packaging
@@ -513,8 +566,8 @@ Treat failures found here as higher priority than new features.
 The standard Windows build workflow is `build-portable.bat` from the workspace
 root (or double-click it), producing a local Windows x64 portable Release.
 Agents use `.\build-portable.bat --no-pause`. It configures `build/windows-portable`,
-enables `VELCAL_PORTABLE`, statically links the MSVC runtime, builds the app/core
-tests in Release, runs CTest, and calls `tools/package_windows_portable.ps1`.
+enables `VELCAL_PORTABLE`, statically links the MSVC runtime, builds the app plus
+core/app tests in Release, runs CTest, and calls `tools/package_windows_portable.ps1`.
 Each successful run creates a new folder and ZIP under `build/portable`, containing
 the EXE, licence, dependency licence notices, and an empty profiles directory. The repository README and
 setup instructions remain on GitHub and are not bundled. Personal data is never
