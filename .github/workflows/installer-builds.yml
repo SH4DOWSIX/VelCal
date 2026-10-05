@@ -37,6 +37,10 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'Installer failed' }
           if (-not (Test-Path "$app/VelCal.exe")) { throw 'Missing standalone' }
           if (-not (Test-Path "$env:CommonProgramFiles/VST3/VelCal.vst3/Contents/x86_64-win/VelCal.vst3")) { throw 'Missing VST3' }
+          $process = Start-Process -FilePath $setup -ArgumentList '/S' -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'Upgrade failed' }
+          $registered = (Get-ItemProperty 'HKLM:/Software/VelCal').InstallDir
+          if ($registered -ne $app) { throw 'Upgrade changed the selected installation directory' }
           $env:VELCAL_DATA_DIR = Join-Path $env:RUNNER_TEMP 'VelCal test data'
           $process = Start-Process -FilePath "$app/VelCal.exe" -PassThru -WindowStyle Hidden
           Start-Sleep -Seconds 4

@@ -78,9 +78,13 @@ command. Run `37373686862` is superseded for this correction. Final native CI
 and publication remain outstanding.
 Final Linux payload review also identified bundled Brotli/libpng libraries;
 their distro copyright notices are now included alongside ALSA and makeself.
-The manual workflow has an all/default or single-platform selector. Run
-`37374044222` continues Windows/macOS validation; a Linux-only run will validate
-the notice additions. Windows/macOS sources and payload scripts are unchanged.
+The manual workflow has an all/default or single-platform selector. Linux-only
+run `37375028280` passed all tests and installer checks with the final notices.
+Windows review found remembered custom directories were read from the default
+32-bit registry view despite being written to the 64-bit view. Initialization
+now explicitly reads the 64-bit view while preserving `/D` overrides, with a
+two-install upgrade-location regression in native CI. Windows will be validated
+separately; macOS run `37374044222` continues unchanged.
 
 VelCal is an early functional desktop application, not merely a prototype core.
 It currently builds on Windows and has been used by the user to calibrate keys

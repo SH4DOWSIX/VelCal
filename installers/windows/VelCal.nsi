@@ -3,8 +3,7 @@ Unicode true
 !include "x64.nsh"
 Name "VelCal ${VERSION}"
 OutFile "${OUTPUT}"
-InstallDir "$PROGRAMFILES64\VelCal"
-InstallDirRegKey HKLM "Software\VelCal" "InstallDir"
+InstallDir ""
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
 !define MUI_ABORTWARNING
@@ -24,6 +23,12 @@ Function .onInit
     Abort
   ${EndIf}
   SetRegView 64
+  ${If} $INSTDIR == ""
+    ReadRegStr $INSTDIR HKLM "Software\VelCal" "InstallDir"
+    ${If} $INSTDIR == ""
+      StrCpy $INSTDIR "$PROGRAMFILES64\VelCal"
+    ${EndIf}
+  ${EndIf}
   SetShellVarContext all
 FunctionEnd
 
