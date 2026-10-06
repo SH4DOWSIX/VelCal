@@ -56,6 +56,7 @@ struct MainComponentTestAccess {
     static void newProfile(MainComponent& component) { component.replaceWithNewProfile(); }
     static void clear(MainComponent& component) { component.clearMeasurementsConfirmed(); }
     static bool dirty(const MainComponent& component) { return component.profileDirty; }
+    static bool discardPromptOpen(const MainComponent& component) { return component.discardPromptOpen; }
     static void editTrim(MainComponent& component)
     {
         component.keyAdjustmentSlider.setValue(4, juce::dontSendNotification);
@@ -120,6 +121,18 @@ bool waitFor(Predicate predicate, const std::chrono::milliseconds timeout = 1s)
         if (std::chrono::steady_clock::now() >= deadline)
             return false;
         std::this_thread::sleep_for(2ms);
+    }
+    return true;
+}
+
+template <typename Predicate>
+bool waitForGui(Predicate predicate, const std::chrono::milliseconds timeout = 2s)
+{
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!predicate()) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return false;
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
     }
     return true;
 }
@@ -528,13 +541,20 @@ void unsavedChangesRequireConfirmation()
     MainComponentTestAccess::editTrim(component);
     expect(MainComponentTestAccess::dirty(component) && MainComponentTestAccess::hasDirtyMarker(component),
         "editing a curve or trim visibly marks the profile unsaved");
-    const auto answerPrompt = [](const int answer) {
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
-        auto* modal = juce::ModalComponentManager::getInstance()->getModalComponent(0);
-        expect(modal != nullptr, "discard confirmation is shown");
-        if (modal)
-            modal->exitModalState(answer);
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+    const auto answerPrompt = [&component](const int answer) {
+        juce::AlertWindow* alert = nullptr;
+        const auto shown = waitForGui([&alert] {
+            alert = dynamic_cast<juce::AlertWindow*>(
+                juce::ModalComponentManager::getInstance()->getModalComponent(0));
+            return alert != nullptr && alert->getName() == "Discard unsaved changes?";
+        });
+        expect(shown, "discard confirmation is shown before the timeout");
+        if (!shown)
+            return;
+        alert->exitModalState(answer);
+        expect(waitForGui([&component] {
+            return !MainComponentTestAccess::discardPromptOpen(component);
+        }), "discard confirmation callback completes before the timeout");
     };
     closed = false;
     component.requestClose([&closed] { closed = true; });

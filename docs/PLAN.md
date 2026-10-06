@@ -67,6 +67,21 @@ results. README edits requested during this run are documentation-only and do
 not authorize a new build. When tagging a later documentation commit, verify
 all build/package inputs are identical to this tested source revision.
 
+Release build result (2026-10-06): Windows and Linux jobs in run `37464355700`
+passed compilation, all three suites, packaging and installer smoke checks.
+macOS universal compiled successfully; core/VST3/AU tests passed, but app tests
+reported `FAIL: discard confirmation is shown`. Packaging and installer checks
+were skipped, so 0.0.3 must not be published. The discard test assumed an async
+dialog would exist after a fixed 30ms message-loop delay. A local test-only fix
+now pumps the GUI loop until the specifically named AlertWindow appears and
+until its discard callback completes, each bounded to two seconds. This is a
+likely scheduling flake, not a proven diagnosis. The user subsequently authorized
+pushing this test-only fix and dispatching a fresh macOS-only build. No local
+build/test run is requested. App/plugin production and packaging inputs are
+unchanged; a rerun of the old revision would not contain the test fix. Passing
+Windows/Linux installers may be retained if production/package-input equivalence
+is verified. Continue waiting for the user's build-result notice, without polling.
+
 README refresh (2026-10-06): the user supplied standalone screenshots, retained
 unchanged under `docs/images/per-key-calibration.png` and
 `docs/images/global-velocity-curve.png`, with captions and descriptive alt text
