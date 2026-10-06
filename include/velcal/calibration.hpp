@@ -133,6 +133,8 @@ double evaluateVelocityCurve(
 VelocityMap makeVelocityCurve(
     const std::vector<VelocityCurvePoint>& points,
     bool smooth) noexcept;
+// Smooth quantization kinks while staying within one velocity step of the source map.
+std::vector<VelocityCurvePoint> smoothCalibrationPoints(const VelocityMap& map);
 
 struct NoteCalibrationStats {
     std::size_t samplesSeen{};

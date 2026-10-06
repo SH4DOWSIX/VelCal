@@ -356,7 +356,7 @@ std::string serializeProfile(const CalibrationProfile& profile)
     json["noteCurveOverrides"] = Json::array();
     for (std::size_t note = 0; note < profile.noteCurveOverrides.size(); ++note) {
         const auto& curve = profile.noteCurveOverrides[note];
-        if (curve.points.empty())
+        if (curve.points.empty() && curve.smooth)
             continue;
         Json points = Json::array();
         for (const auto& point : curve.points)
@@ -437,6 +437,10 @@ CalibrationProfile deserializeProfile(const std::string& data)
             profile.noteCurveOverrides[note].smooth = source.value("smooth", true);
         }
     }
+    const auto smoothAllKeys = std::all_of(profile.noteCurveOverrides.begin(),
+        profile.noteCurveOverrides.end(), [](const auto& curve) { return curve.smooth; });
+    for (auto& curve : profile.noteCurveOverrides)
+        curve.smooth = smoothAllKeys;
     profile.schemaVersion = currentProfileSchemaVersion;
     profile.algorithmVersion = currentAlgorithmVersion;
     return profile;
@@ -453,6 +457,8 @@ std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile)
         const auto& curve = profile.noteCurveOverrides[note];
         if (!curve.points.empty())
             maps[note] = makeVelocityCurve(curve.points, curve.smooth);
+        else if (curve.smooth)
+            maps[note] = makeVelocityCurve(smoothCalibrationPoints(maps[note]), true);
         for (std::size_t velocity = 1; velocity < maps[note].values.size(); ++velocity) {
             const auto adjusted = static_cast<std::uint8_t>(std::clamp(
                 static_cast<int>(maps[note].values[velocity]) + profile.noteAdjustments[note], 1, 127));

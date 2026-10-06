@@ -11,11 +11,11 @@ physical action.
 
 **[Download VelCal](https://github.com/SH4DOWSIX/VelCal/releases/latest)**
 
-Version 0.0.2 provides installers for standalone and VST3 on Windows, Linux, and
+Version 0.0.3 provides installers for standalone and VST3 on Windows, Linux, and
 macOS, plus an AU MIDI effect for Logic on macOS. Only Windows has real keyboard
 and DAW validation; Linux/macOS are experimental. See
 [installation and DAW routing](docs/INSTALLING.md) and
-[release notes](docs/releases/0.0.2.md), including unsigned-installer warnings.
+[release notes](docs/releases/0.0.3.md), including unsigned-installer warnings.
 
 ## What You Can Do
 

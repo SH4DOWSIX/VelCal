@@ -26,6 +26,17 @@ struct MainComponentTestAccess {
     static void load(MainComponent& component, const juce::File& file) { component.loadProfile(file); }
     static juce::String displayedName(const MainComponent& component) { return component.profileBox.getText(); }
     static int selectedProfile(const MainComponent& component) { return component.profileBox.getSelectedId(); }
+    static juce::String selectedProfileText(const MainComponent& component)
+    { return component.profileBox.getItemText(component.profileBox.indexOfItemId(component.profileBox.getSelectedId())); }
+    static bool noSavedProfiles(const MainComponent& component)
+    {
+        for (int index = 0; index < component.profileBox.getNumItems(); ++index)
+            if (component.profileBox.getItemText(index) == "No saved profiles"
+                && !component.profileBox.isItemEnabled(component.profileBox.getItemId(index)))
+                return true;
+        return false;
+    }
+    static void selectCurrentProfile(MainComponent& component) { component.comboBoxChanged(&component.profileBox); }
     static void newProfileWithHiddenDevice(MainComponent& component)
     {
         component.midiInputs.add({"LM - Keysight Input", "test-virtual-input"});
@@ -124,14 +135,19 @@ void firstRunAndExternalProfiles()
     {
         MainComponent standalone;
         expect(profiles.isDirectory(), "standalone creates its profile folder before saving");
+        expect(MainComponentTestAccess::displayedName(standalone) == "No saved profiles"
+                && MainComponentTestAccess::noSavedProfiles(standalone),
+            "standalone with no library or active profile shows No saved profiles");
     }
     expect(profiles.deleteFile(), "empty standalone profile folder can be removed");
     PluginState state;
     {
         MainComponent editor(&state);
         expect(profiles.isDirectory(), "plugin creates its profile folder without standalone or saving");
-        expect(MainComponentTestAccess::displayedName(editor) == "New calibration",
-            "initial plugin profile has a neutral name");
+        expect(MainComponentTestAccess::displayedName(editor) == "New calibration (unsaved)"
+                && MainComponentTestAccess::selectedProfileText(editor) == "New calibration (unsaved)"
+                && MainComponentTestAccess::noSavedProfiles(editor),
+            "empty plugin library has a selectable unsaved profile and a clear no-saved-profiles entry");
         MainComponentTestAccess::newProfileWithHiddenDevice(editor);
         const auto fresh = state.snapshot();
         expect(fresh.profile->profileName == "New calibration"
@@ -152,30 +168,38 @@ void firstRunAndExternalProfiles()
                 pathConsistent = pathConsistent && snapshot.profileFile == external;
         };
         MainComponentTestAccess::load(editor, external);
-        expect(MainComponentTestAccess::displayedName(editor) == "Imported calibration"
+        expect(MainComponentTestAccess::displayedName(editor) == "old-file-name"
                 && MainComponentTestAccess::selectedProfile(editor) != 0,
-            "external profile displays its saved name as a selected entry");
+            "external profile displays its filename rather than internal profile name");
         expect(MainComponentTestAccess::adjustment(editor) == 9 && pathConsistent,
             "external profile settings and path publish together");
         expect(!profiles.getChildFile(external.getFileName()).exists(),
             "opening an external profile does not require moving or copying it");
         state.onChange = nullptr;
     }
+    const auto savedState = state.serialize();
+    const auto external = root.getChildFile("old-file-name.velcal.json");
+    expect(external.deleteFile(), "external profile can be removed before embedded DAW-state recall");
     PluginState recalled;
-    expect(recalled.restore(state.serialize()), "external profile survives DAW project recall");
+    expect(recalled.restore(savedState), "external profile survives DAW project recall without its file");
     {
         MainComponent editor(&recalled);
-        expect(MainComponentTestAccess::displayedName(editor) == "Imported calibration"
+        expect(MainComponentTestAccess::displayedName(editor) == "old-file-name"
+                && MainComponentTestAccess::selectedProfileText(editor) == "old-file-name"
+                && MainComponentTestAccess::noSavedProfiles(editor)
                 && MainComponentTestAccess::adjustment(editor) == 9,
-            "reopened plugin keeps the external profile name and settings");
+            "reopened plugin keeps the missing file's name, selected entry and embedded settings");
+        MainComponentTestAccess::selectCurrentProfile(editor);
+        expect(MainComponentTestAccess::adjustment(editor) == 9,
+            "selecting the active missing-file profile does not reload or discard embedded settings");
         velcal::CalibrationProfile library;
         library.profileName = "Library calibration";
         library.generated = velcal::calibrate({});
         const auto file = profiles.getChildFile("different-file-name.velcal.json");
         velcal::saveProfile(library, std::filesystem::u8path(file.getFullPathName().toStdString()));
         MainComponentTestAccess::load(editor, file);
-        expect(MainComponentTestAccess::displayedName(editor) == "Library calibration",
-            "library and external profiles both display the saved profile name");
+        expect(MainComponentTestAccess::displayedName(editor) == "different-file-name",
+            "library and external profiles both display filenames");
     }
     expect(setDataRoot(previousRoot) == 0, "original test data root is restored");
     expect(root.deleteRecursively(), "isolated profile test files are removed");

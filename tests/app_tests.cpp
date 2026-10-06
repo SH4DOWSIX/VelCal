@@ -1,4 +1,5 @@
 #include "MainComponent.hpp"
+#include "DataPaths.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -16,6 +17,29 @@ struct MidiEngineTestAccess {
 };
 
 struct MainComponentTestAccess {
+    static void accent(MainComponent& component, std::size_t index) { component.chooseAccent(index); }
+    static juce::uint32 accent(const MainComponent& component) { return component.green; }
+    static void refreshAppearance(MainComponent& component) { component.loadAppearance(); }
+    static bool accentControlsMatch(const MainComponent& component)
+    {
+        return component.keyAdjustmentSlider.findColour(juce::Slider::trackColourId)
+                == juce::Colour(component.green)
+            && component.saveProfileButton.findColour(juce::TextButton::buttonColourId)
+                == juce::Colour(component.green).darker(0.55f);
+    }
+    static bool themeButtonFits(MainComponent& component)
+    {
+        component.setSize(860, 820);
+        const auto bounds = component.themeButton.getBounds();
+        return component.getLocalBounds().contains(bounds)
+            && bounds.getY() > component.saveProfileButton.getBottom()
+            && !bounds.intersects(component.globalTabButton.getBounds())
+            && !bounds.intersects(component.statusLabel.getBounds())
+            && !bounds.intersects(component.curveBounds.toNearestInt());
+    }
+    static void openPalette(MainComponent& component) { component.showThemePalette(); }
+    static bool paletteFits(const MainComponent& component)
+    { return component.themePopup && component.getLocalBounds().contains(component.themePopup->getBounds()); }
     static void startCapture(MainComponent& component)
     {
         MidiEngineTestAccess::capture(component.midiEngine);
@@ -43,6 +67,36 @@ struct MainComponentTestAccess {
     static void save(MainComponent& component, const juce::File& file) { component.writeProfile(file); }
     static void requestNewProfile(MainComponent& component) { component.createNewProfile(); }
     static std::string name(const MainComponent& component) { return component.profile->profileName; }
+    static juce::String displayedProfile(const MainComponent& component) { return component.profileBox.getText(); }
+    static void selectCurveTab(MainComponent& component, bool global)
+    { component.setActiveTab(global); }
+    static void clickSmooth(MainComponent& component)
+    {
+        component.smoothCurveToggle.setToggleState(
+            !component.smoothCurveToggle.getToggleState(), juce::sendNotification);
+    }
+    static bool smoothDisplayed(const MainComponent& component)
+    { return component.smoothCurveToggle.getToggleState(); }
+    static bool smoothStored(MainComponent& component) { return component.editableCurveSmooth(); }
+    static bool hasEditablePoints(MainComponent& component)
+    { return !component.editableCurvePoints().empty(); }
+    static void detailedCalibration(MainComponent& component)
+    {
+        component.profile->generated.noteMaps[component.selectedNote].values[40] = 41;
+        component.profile->noteAdjustments[component.selectedNote] = 4;
+        component.updateEditingControls();
+        component.updateEffectiveMaps();
+    }
+    static velcal::CalibrationProfile profile(const MainComponent& component) { return *component.profile; }
+    static std::uint8_t selectedNote(const MainComponent& component) { return component.selectedNote; }
+    static void selectNote(MainComponent& component, std::uint8_t note)
+    {
+        component.selectedNote = note;
+        component.updateEditingControls();
+    }
+    static void addManualCurve(MainComponent& component)
+    { component.profile->noteCurveOverrides[72].points = {{1, 1}, {64, 80}, {127, 127}}; }
+    static void resetKey(MainComponent& component) { component.buttonClicked(&component.resetKeyButton); }
 };
 
 namespace {
@@ -280,6 +334,75 @@ void recoveredOutputsCanRestartWithoutStaleMessages()
         "a stale note from the old session never reaches the replacement output");
 }
 
+void accentPreferencePersistsWithoutChangingProfiles()
+{
+    const auto file = velcalProfileDirectory().getChildFile(".velcal-appearance.json");
+    struct RestorePreference {
+        juce::File file;
+        bool existed;
+        juce::MemoryBlock bytes;
+        bool enabled{true};
+        ~RestorePreference()
+        {
+            if (!enabled) return;
+            if (existed) file.replaceWithData(bytes.getData(), bytes.getSize());
+            else file.deleteFile();
+        }
+    } restore{file, file.existsAsFile(), {}};
+    if (restore.existed && !file.loadFileAsData(restore.bytes)) {
+        expect(false, "test can preserve existing appearance preferences");
+        restore.enabled = false;
+        return;
+    }
+    file.deleteFile();
+    {
+        MainComponent component;
+        expect(MainComponentTestAccess::accent(component) == velcal_ui::accent,
+            "missing appearance preferences default to teal");
+        MainComponentTestAccess::newProfile(component);
+        const auto before = velcal::serializeProfile(MainComponentTestAccess::profile(component));
+        const auto dirty = MainComponentTestAccess::dirty(component);
+        for (std::size_t i = 0; i < velcal_ui::accents.size(); ++i) {
+            MainComponentTestAccess::accent(component, i);
+            expect(MainComponentTestAccess::accent(component) == velcal_ui::accents[i].colour
+                    && MainComponentTestAccess::accentControlsMatch(component),
+                "each accent updates shared controls");
+        }
+        expect(velcal::serializeProfile(MainComponentTestAccess::profile(component)) == before
+                && MainComponentTestAccess::dirty(component) == dirty,
+            "appearance changes do not modify calibration or dirty state");
+        expect(MainComponentTestAccess::themeButtonFits(component), "theme button fits the minimum editor size");
+        MainComponentTestAccess::openPalette(component);
+        expect(MainComponentTestAccess::paletteFits(component), "palette stays inside the editor");
+    }
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    {
+        MainComponent reopened;
+        PluginState plugin;
+        MainComponent editor(&plugin);
+        expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents.back().colour
+                && MainComponentTestAccess::accent(editor) == velcal_ui::accents.back().colour,
+            "standalone and plugin editors recall the saved accent");
+        const auto before = plugin.serialize();
+        MainComponentTestAccess::accent(editor, 12);
+        MainComponentTestAccess::refreshAppearance(reopened);
+        expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents[12].colour
+                && plugin.serialize() == before,
+            "open editors share appearance without changing DAW state");
+        MainComponentTestAccess::accent(editor, velcal_ui::accents.size());
+        expect(MainComponentTestAccess::accent(editor) == velcal_ui::accents[12].colour,
+            "invalid palette indices are ignored");
+        file.replaceWithText("{broken");
+        MainComponentTestAccess::refreshAppearance(reopened);
+        expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accent,
+            "damaged preferences safely fall back to teal");
+        file.replaceWithText("{\"accent\":\"Unknown\"}");
+        MainComponentTestAccess::refreshAppearance(editor);
+        expect(MainComponentTestAccess::accent(editor) == velcal_ui::accent,
+            "unknown saved accents safely fall back to teal");
+    }
+}
+
 void captureExitRestoresControls()
 {
     MainComponent component;
@@ -293,6 +416,104 @@ void captureExitRestoresControls()
     MainComponentTestAccess::startCapture(component);
     MainComponentTestAccess::clear(component);
     expect(MainComponentTestAccess::controlsEnabled(component), "clearing measurements restores capture controls");
+}
+
+void firstSmoothClickAppliesToNewCurve()
+{
+    MainComponent component;
+    for (const bool global : {false, true}) {
+        MainComponentTestAccess::newProfile(component);
+        MainComponentTestAccess::selectCurveTab(component, global);
+        expect(!MainComponentTestAccess::hasEditablePoints(component),
+            "smooth regression starts with an automatic curve");
+        expect(MainComponentTestAccess::smoothDisplayed(component)
+                && MainComponentTestAccess::smoothStored(component),
+            "automatic curve starts with smoothing enabled");
+        MainComponentTestAccess::clickSmooth(component);
+        expect(!MainComponentTestAccess::smoothDisplayed(component)
+                && !MainComponentTestAccess::smoothStored(component),
+            "first click disables smoothing in the UI and stored curve");
+        expect(MainComponentTestAccess::hasEditablePoints(component) == global
+                && MainComponentTestAccess::dirty(component),
+            "smooth only seeds a manual curve for the global tab and marks the setting unsaved");
+        MainComponentTestAccess::clickSmooth(component);
+        expect(MainComponentTestAccess::smoothDisplayed(component)
+                && MainComponentTestAccess::smoothStored(component),
+            "second click enables smoothing in the UI and stored curve");
+    }
+}
+
+void smoothPreservesAutomaticCalibration()
+{
+    MainComponent component;
+    MainComponentTestAccess::newProfile(component);
+    MainComponentTestAccess::selectCurveTab(component, false);
+    MainComponentTestAccess::detailedCalibration(component);
+    const auto before = MainComponentTestAccess::profile(component);
+    const auto selectedNote = MainComponentTestAccess::selectedNote(component);
+    const auto expectedMaps = velcal::effectiveMaps(before);
+    for (int click = 0; click < 2; ++click) {
+        MainComponentTestAccess::clickSmooth(component);
+        const auto after = MainComponentTestAccess::profile(component);
+        expect(!MainComponentTestAccess::hasEditablePoints(component),
+            "smooth toggle keeps per-key calibration automatic");
+        expect(after.noteAdjustments == before.noteAdjustments,
+            "smooth toggle preserves per-key trim");
+        const auto maps = velcal::effectiveMaps(after);
+        for (std::size_t note = 0; note < maps.size(); ++note) {
+            if (click == 1)
+                expect(maps[note].values == expectedMaps[note].values,
+                    "off/on restores the same smoothed MIDI outputs");
+            expect(after.generated.noteMaps[note].values == before.generated.noteMaps[note].values,
+                "smooth toggle leaves generated calibration unchanged");
+        }
+        if (click == 0)
+            expect(maps[selectedNote].apply(40) == 45,
+                "Smooth off restores the original calibrated output plus trim");
+        else
+            expect(maps[selectedNote].apply(40) == 44,
+                "Smooth on removes the quantization kink from MIDI correction");
+        const auto loaded = velcal::deserializeProfile(velcal::serializeProfile(after));
+        expect(loaded.noteCurveOverrides[selectedNote].points.empty()
+                && loaded.noteCurveOverrides[selectedNote].smooth == after.noteCurveOverrides[selectedNote].smooth,
+            "automatic smoothing preference survives profile serialization without a manual curve");
+    }
+}
+
+void smoothSwitchAppliesToWholeKeyboard()
+{
+    MainComponent component;
+    MainComponentTestAccess::newProfile(component);
+    MainComponentTestAccess::addManualCurve(component);
+    for (int click = 0; click < 2; ++click) {
+        MainComponentTestAccess::clickSmooth(component);
+        const bool expected = click == 1;
+        const auto profile = MainComponentTestAccess::profile(component);
+        for (const auto& curve : profile.noteCurveOverrides)
+            expect(curve.smooth == expected, "one Smooth click updates all automatic and manual key curves");
+        expect(profile.noteCurveOverrides[72].points.size() == 3,
+            "whole-keyboard Smooth preserves manual control points");
+        for (const auto note : {21, 60, 72, 108}) {
+            MainComponentTestAccess::selectNote(component, static_cast<std::uint8_t>(note));
+            expect(MainComponentTestAccess::smoothDisplayed(component) == expected,
+                "Smooth switch does not change when selecting another key");
+        }
+        const auto recalled = velcal::deserializeProfile(velcal::serializeProfile(profile));
+        for (const auto& curve : recalled.noteCurveOverrides)
+            expect(curve.smooth == expected, "whole-keyboard smoothing survives profile recall");
+    }
+    MainComponentTestAccess::clickSmooth(component);
+    MainComponentTestAccess::resetKey(component);
+    expect(!MainComponentTestAccess::smoothDisplayed(component)
+            && !MainComponentTestAccess::smoothStored(component),
+        "Reset key preserves whole-keyboard Smooth off");
+    MainComponentTestAccess::newProfile(component);
+    expect(MainComponentTestAccess::smoothDisplayed(component), "new profiles default Smooth to on");
+    MainComponentTestAccess::selectCurveTab(component, true);
+    MainComponentTestAccess::clickSmooth(component);
+    const auto profile = MainComponentTestAccess::profile(component);
+    for (const auto& curve : profile.noteCurveOverrides)
+        expect(curve.smooth, "global curve smoothing remains independent of key-curve smoothing");
 }
 
 void unsavedChangesRequireConfirmation()
@@ -341,6 +562,8 @@ void unsavedChangesRequireConfirmation()
     expect(MainComponentTestAccess::name(component) == "Replacement"
             && !MainComponentTestAccess::dirty(component),
         "confirming a switch loads the requested profile and clears the dirty flag");
+    expect(MainComponentTestAccess::displayedProfile(component) == "velcal-app-load-test",
+        "standalone displays the loaded filename rather than its internal profile name");
     MainComponentTestAccess::editTrim(component);
     MainComponentTestAccess::requestNewProfile(component);
     answerPrompt(0);
@@ -350,6 +573,9 @@ void unsavedChangesRequireConfirmation()
     MainComponentTestAccess::save(component, file);
     expect(!MainComponentTestAccess::dirty(component) && !MainComponentTestAccess::hasDirtyMarker(component),
         "a successful save clears the unsaved marker");
+    expect(MainComponentTestAccess::displayedProfile(component) == "velcal-app-load-test"
+            && MainComponentTestAccess::name(component) == "Replacement",
+        "saving keeps filename display without rewriting the internal profile metadata");
     std::filesystem::remove(path);
 }
 
@@ -365,6 +591,10 @@ int main()
     outputFailuresAreReported();
     recoveredOutputsCanRestartWithoutStaleMessages();
     captureExitRestoresControls();
+    accentPreferencePersistsWithoutChangingProfiles();
+    firstSmoothClickAppliesToNewCurve();
+    smoothPreservesAutomaticCalibration();
+    smoothSwitchAppliesToWholeKeyboard();
     unsavedChangesRequireConfirmation();
     if (failures == 0)
         std::cout << "All VelCal app tests passed.\n";

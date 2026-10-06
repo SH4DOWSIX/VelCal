@@ -19,7 +19,7 @@ download before proceeding. Uninstall through Windows Installed Apps.
 Debian/Ubuntu x64 (Ubuntu 22.04 or compatible newer runtime):
 
 ```sh
-sudo apt install ./VelCal-0.0.2-Linux-x64.deb
+sudo apt install ./VelCal-0.0.3-Linux-x64.deb
 ```
 
 Standalone goes to `/usr/bin/VelCal` and VST3 to `/usr/lib/vst3`.
@@ -29,13 +29,13 @@ Remove using `sudo apt remove velcal`.
 Alternatively, install per user without root:
 
 ```sh
-chmod +x VelCal-0.0.2-Linux-x64-Install.run
-./VelCal-0.0.2-Linux-x64-Install.run
+chmod +x VelCal-0.0.3-Linux-x64-Install.run
+./VelCal-0.0.3-Linux-x64-Install.run
 ```
 
 The `.run` installs standalone in `~/.local/lib/velcal` with a desktop entry
 and `~/.local/bin/velcal`; VST3 goes into `~/.vst3`. Optional components:
-`./VelCal-0.0.2-Linux-x64-Install.run -- --standalone-only` or `-- --vst3-only`.
+`./VelCal-0.0.3-Linux-x64-Install.run -- --standalone-only` or `-- --vst3-only`.
 Uninstall with `bash ~/.local/lib/velcal/uninstall.sh --uninstall`.
 Do not mix both installers. Linux x64 needs glibc 2.35+; the plugin also requires
 your distribution's normal desktop/audio libraries.
@@ -100,7 +100,13 @@ but Save updates that original file rather than migrating it. Installers do not
 migrate or delete old personal files. Standalone and plugins share profile
 files, but each plugin instance has independent DAW project state.
 
-The source after 0.0.2 creates this folder when either UI opens and displays the
-saved name of a loaded profile consistently, including files outside the folder.
-New profiles are named `New calibration`, not after a MIDI device. These fixes
-are not included in the published 0.0.2 installers; an updated build is pending.
+Version 0.0.3 creates this folder when either UI opens. Saved profiles display
+their filenames without `.velcal.json`, not internal profile or MIDI-device
+names, including files outside the folder. New profiles are named
+`New calibration`, not after a MIDI device. Unsaved profiles and empty libraries
+have explicit selector entries; DAW projects retain embedded profiles even if
+the original file is missing.
+
+The paintbrush below Save profile changes the accent colour. The choice is
+remembered separately from calibration and shared by standalone and plugins.
+Installed editors also show GitHub release-update status at the bottom left.

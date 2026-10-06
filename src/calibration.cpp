@@ -527,6 +527,35 @@ VelocityMap makeVelocityCurve(
     return map;
 }
 
+std::vector<VelocityCurvePoint> smoothCalibrationPoints(const VelocityMap& map)
+{
+    constexpr std::array<int, 9> anchors{1, 16, 32, 48, 64, 80, 96, 112, 127};
+    std::vector<VelocityCurvePoint> points;
+    for (const auto input : anchors)
+        points.push_back({static_cast<double>(input),
+            static_cast<double>(map.apply(static_cast<std::uint8_t>(input)))});
+
+    while (points.size() < 127) {
+        double worstError = 1.0 + 1.0e-9;
+        int worstInput = 0;
+        for (int input = 1; input <= 127; ++input) {
+            const auto error = std::abs(evaluateVelocityCurve(points, true, input)
+                - map.apply(static_cast<std::uint8_t>(input)));
+            if (error > worstError) {
+                worstError = error;
+                worstInput = input;
+            }
+        }
+        if (worstInput == 0)
+            break;
+        const auto position = std::lower_bound(points.begin(), points.end(), worstInput,
+            [](const VelocityCurvePoint& point, int input) { return point.input < input; });
+        points.insert(position, {static_cast<double>(worstInput),
+            static_cast<double>(map.apply(static_cast<std::uint8_t>(worstInput)))});
+    }
+    return points;
+}
+
 CalibrationResult calibrate(
     const std::vector<CalibrationPress>& presses,
     const CalibrationConfig& config)

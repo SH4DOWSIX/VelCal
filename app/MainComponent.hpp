@@ -3,6 +3,7 @@
 #include "velcal/profile.hpp"
 #include "MidiEngine.hpp"
 #include "PluginState.hpp"
+#include "Theme.hpp"
 
 #include <JuceHeader.h>
 
@@ -36,10 +37,15 @@ private:
         const juce::MouseEvent& event,
         const juce::MouseWheelDetails& wheel) override;
     void timerCallback() override;
+    void refreshUpdateStatus();
     void refreshMidiInputs();
     void refreshMidiOutputs();
     void loadAppState();
     void saveAppState() const;
+    void loadAppearance();
+    void applyAccent(juce::uint32 colour);
+    void chooseAccent(std::size_t index);
+    void showThemePalette();
     void restoreMidiSelections(
         const juce::String& inputIdentifier,
         const juce::String& inputName,
@@ -99,6 +105,8 @@ private:
     std::optional<std::uint8_t> noteAtPosition(juce::Point<float> position) const;
     static juce::String midiNoteName(std::uint8_t note);
 
+    velcal_ui::Theme theme{this};
+    juce::Image brandIcon;
     juce::Label titleLabel;
     juce::TextButton perKeyTabButton{"Per-key calibration"};
     juce::TextButton globalTabButton{"Global curve"};
@@ -114,6 +122,7 @@ private:
     juce::TextButton clearProfileButton{"Clear data"};
     juce::TextButton openProfileButton{"Open profile"};
     juce::TextButton saveProfileButton{"Save profile"};
+    juce::TextButton themeButton;
     juce::TextButton deleteProfileButton{"Delete"};
     juce::Label keyAdjustmentLabel;
     juce::Slider keyAdjustmentSlider;
@@ -133,8 +142,13 @@ private:
     juce::ComboBox profileBox;
     juce::Label selectedNoteLabel;
     juce::Label statusLabel;
+    juce::Label updateStatusLabel;
     std::unique_ptr<juce::FileChooser> fileChooser;
     std::unique_ptr<juce::Component> captureGuide;
+    std::unique_ptr<juce::Component> themePalette;
+    std::unique_ptr<juce::CallOutBox> themePopup;
+    juce::uint32 green{velcal_ui::accent};
+    int appearancePollTicks{};
     juce::Array<juce::MidiDeviceInfo> midiInputs;
     juce::Array<juce::MidiDeviceInfo> midiOutputs;
     juce::Array<juce::File> profileFiles;
@@ -156,6 +170,9 @@ private:
     juce::Rectangle<float> keyboardBounds;
     juce::Rectangle<float> keyboardKeyBounds;
     juce::Rectangle<float> curveBounds;
+    juce::Rectangle<float> metricsBounds;
+    juce::Rectangle<float> adjustmentBounds;
+    juce::TooltipWindow tooltipWindow{this, 700};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

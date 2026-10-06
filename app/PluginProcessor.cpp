@@ -11,8 +11,8 @@ public:
     {
         addAndMakeVisible(component);
         setResizable(true, true);
-        setResizeLimits(860, 720, 1800, 1200);
-        setSize(1180, 760);
+        setResizeLimits(860, 820, 1800, 1200);
+        setSize(1180, 820);
     }
     void resized() override { component.setBounds(getLocalBounds()); }
 private:

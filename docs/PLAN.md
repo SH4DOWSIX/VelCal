@@ -1,6 +1,6 @@
 # VelCal Project Handoff and Plan
 
-Last updated: 2026-10-05
+Last updated: 2026-10-06
 
 This is the durable starting point for a new VelCal development conversation.
 Read `AGENTS.md` first for workspace rules, then this file before proposing or
@@ -53,12 +53,19 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Release 0.0.3 preparation (2026-10-06): the user authorized pushing all reviewed
+development changes, dispatching all three native installer jobs, and publishing
+only after every requested job passes. Application version is now 0.0.3;
+schema 4 and algorithm 0.4.0 remain unchanged. Release notes are
+`docs/releases/0.0.3.md`. Build/publication evidence will be recorded here once
+available. No local build is requested; the existing workflow stays manual-only.
+
 Post-release source fixes (2026-10-05): the user reported the installed profile
 folder was absent until standalone saved, external profile names did not update
 in the DAW, and new profiles inherited a virtual MIDI input name. Opening either
 UI now creates the profile folder. The active external file is included in the
-profile selector, and active entries use the saved profile name consistently
-inside/outside the folder. Profile loading publishes its new path together with
+profile selector. The filename-display update below supersedes the earlier
+use of internal profile names. Profile loading publishes its new path together with
 its settings. New profiles use `New calibration`; plugin device metadata is
 `DAW MIDI`, never a hidden physical endpoint. Existing saved names are preserved.
 Regression tests were added for folder creation, external/library naming,
@@ -66,6 +73,135 @@ plugin recall, and neutral new-profile names. These changes are source-only:
 no builds or test execution were authorized, and published 0.0.2 installers are
 unchanged. Compile and run the updated suites in the next explicitly authorized
 build before delivering updated installers.
+
+Post-release source change (2026-10-06): standalone and plugin editors now have a
+small, unboxed update status line anchored to the bottom of the left sidebar,
+with 28px left and bottom padding. It follows window resizing independently
+of the three metrics above it.
+Standalone and plugin windows default to 1180 x 820, with a minimum height of
+820, matching their opening height so the status stays clear of Sections when
+resizing. The curve editor no longer reserves
+bottom space for the update indicator. Installed builds perform a one-shot
+background check of GitHub's latest VelCal release, compare it with the compiled
+app version, and report whether an update is available, the app is current, or
+the check is unavailable. A module-owned worker and cached result are shared
+across plugin instances and editor close/reopen; neither networking nor worker
+shutdown runs when closing an editor. The worker is joined at module unload.
+The first editor starts the check; a host unloading/reloading the module starts
+a fresh check. Separate VST3/AU modules or sandboxed host processes each have
+their own cache. CTest sets `VELCAL_DISABLE_UPDATE_CHECK=1` to keep tests offline;
+direct plugin test runs in installed builds must set that variable too.
+Development builds leave checks off. This change is source-only; no build or
+test execution was authorized. Compilation and real-host validation are pending.
+
+UI modernization (2026-10-06, source-only): standalone/VST3/AU share the new
+component-owned `app/Theme.hpp` look and feel, following the user's mockup.
+Teal primary actions and selected tabs, outlined icon buttons, switch-style
+Route MIDI/Smooth controls, larger selectors, the embedded app icon in the
+header, and green/cyan/violet statistics replace the earlier flat styling.
+The keyboard has shaded keys and a teal selection outline. Both velocity graphs
+have a title and a translucent fill below the curve; plotting and hit testing
+still use the same shared bounds. Statistics now follow the sidebar controls
+and adapt their height to preserve clearance above the bottom update text.
+Default/minimum window heights remain 820. The existing app PNG is embedded for
+plugin-only builds and app/plugin tests as well as standalone. No profile schema,
+calibration, routing, or host-state changes. Source/API/layout checks completed;
+no build or runtime visual validation performed. Next authorized build should
+verify both tabs, minimum/default/wide sizes, menus, capture guide and dialogs,
+keyboard scrolling, curve editing, and plugin editor reopening.
+
+Smooth first-click fix (2026-10-06, source-only): creating the first editable
+per-key curve refreshed the toggle from its previous stored value before the
+click handler read the user's requested value. The handler now captures that
+value before curve creation and applies it to both the model and switch.
+Added app regressions for the first off/next on click on initially automatic
+per-key and global curves, including editable-point creation and dirty state.
+No build or test execution performed; run the updated suite in the next
+explicitly authorized build. The shared fix also applies to plugin editors.
+
+Automatic Smooth follow-up (2026-10-06, source-only): the initial nine-point
+manual override lost details on the first toggle. The subsequent approach of
+interpolating all 127 integer values preserved calibration but did not visibly
+smooth quantization kinks. The current automatic Smooth mode uses a shared,
+adaptive monotonic fit: nine initial anchors plus additional points wherever
+the interpolated output differs from the original map by more than one velocity
+step. The graph and effective MIDI maps both use this fit when Smooth is on;
+off restores the exact generated map. Original calibration, trim and automatic
+mode are retained, so off/on returns to the same fit without a manual override.
+Smoothing is also applied at load for profiles whose per-key Smooth is already
+true (the existing default), with at most one velocity step difference before
+trim and global processing. Existing manual curves still use their stored
+points; global curves retain their existing behavior. Profile serialization
+retains Smooth=false for empty per-key point lists using existing schema-4
+fields. Added core regressions for visible kink removal, bounded error, sharp
+calibration detail, monotonicity, endpoint preservation, MIDI/graph agreement,
+off/on restoration and manual overrides; app regressions cover trim and setting
+serialization. No build or test execution performed. Validate the updated
+core/app/plugin suites and visual on/off behavior in the next authorized build.
+
+Whole-keyboard Smooth (2026-10-06, source-only): the Smooth switch on the
+per-key tab now sets smoothing for all 128 note curves, including manual
+overrides, in one action. Selection and Reset key preserve the keyboard-wide
+choice. New profiles default to on. The existing per-note schema-4 flags store
+the uniform choice; older mixed profiles resolve to off for all keys during
+loading so selection cannot produce conflicting switch states. Manual points
+and calibration remain intact. Global-tab Smooth remains independent and
+controls the final global curve. Added regressions for all-key toggles, key
+selection, reset, default-on, serialization and legacy mixed-profile recall.
+No build or test execution performed.
+
+Profile selector update (2026-10-06, source-only): all saved-profile entries and
+the active selection now display the filename without `.velcal.json`, never the
+internal profile or MIDI-device name. Internal metadata is not rewritten.
+Unsaved profiles have a selectable `New calibration (unsaved)` entry; an empty
+library has a disabled `No saved profiles` entry. A recalled DAW profile keeps
+its filename and selected entry even if the file is missing, using the embedded
+state. Selecting that active entry does not attempt to reload the missing file.
+The shared theme parents combo-box menus to MainComponent, prefers downward
+placement, removes selected-row alignment that pushed the menu above the app,
+and uses 36px rows. JUCE constrains large menus to the editor with scrolling.
+Editor shutdown dismisses its menus before destroying the theme. Standalone
+and shared VST3/AU regression coverage now checks filename/internal-name
+mismatches, empty libraries, selectable unsaved profiles, missing-file project
+recall and unchanged metadata after saving. No build or test execution; runtime
+popup placement/scrolling verification remains for the next authorized build.
+
+Curve coordinate bubble (2026-10-06, source-only): the drag readout now measures
+its full Input/Output text using an explicit 12px font, reserves padding and
+space for three-digit values, and disables ellipsis. Placement flips around
+the dragged point and clamps to the plot at all four edges. This shared drawing
+path covers per-key/global curves in standalone and plugins. Source/API and
+edge-placement checks completed; no build or runtime visual verification.
+
+Icon replacement (2026-10-06, source-only): `resources/app-icon.png` is now a
+byte-for-byte copy of the user's `D:\Coding\Gradient Curve Editor Icon.png`
+(1254 x 1254 RGBA). The original artwork is not regenerated or altered. The
+shared `app/AppIcon.hpp` caches a transparent-margin crop for runtime display,
+preserving every nontransparent pixel and a 2px safety margin. Header rendering
+uses a 52 x 52 area, aspect-ratio preservation, high-quality resampling and
+explicit full opacity; the earlier icon inherited 40% opacity from sidebar
+border drawing. The standalone native window icon uses the same cropped image,
+scaled into a square canvas without stretching. Existing CMake/platform icon
+packaging uses the replaced PNG. Source/hash/API checks completed; no build or
+runtime icon verification. Generated executable/bundle icons require rebuilding.
+
+Accent palette (2026-10-06, source-only): a paintbrush icon below Save profile
+opens an editor-contained callout with 16 labelled colour swatches. Selection
+applies immediately to primary actions, tabs, switches, sliders, curve lines,
+fills, handles, coordinate outlines, connected status and keyboard selection.
+The dark surfaces and semantic data-status colours remain unchanged. Teal is
+the default. `.velcal-appearance.json` in the shared writable profile directory
+stores the named accent separately from MIDI preferences, calibration profiles
+and DAW project state. Standalone/VST3/AU editors recall the choice and poll it
+once per second to synchronize other open editors; malformed/unknown preferences
+fall back to teal. Writes use JUCE's temporary-file replacement, and failed
+writes leave the previous accent selected and report the error. The popup is
+owned by its editor and destroyed before its theme, including during modal use.
+Added app regressions for all colours, persistence, plugin/editor sharing,
+unchanged profile/host state, minimum-size placement, popup shutdown and invalid
+preferences. Source/API and whitespace checks only; no build or runtime tests
+were authorized. Verify popup placement, keyboard navigation and visual contrast
+in standalone and real DAW hosts during the next authorized build.
 
 Current release `0.0.2` is installer-first: Windows Setup, Linux DEB/user-local RUN,
 and universal macOS PKG. VST3 is an instrument-style MIDI processor on all three;
@@ -111,7 +247,7 @@ calibration pass.
 
 Current versions:
 
-- Application/CMake project version: `0.0.2`
+- Application/CMake project version: `0.0.3`
 - Profile schema: `4`
 - Calibration algorithm: `0.4.0`
 - JUCE: `9.0.3`, pinned under `.deps`
@@ -347,8 +483,9 @@ The piano rendering uses correct black-key placement over white-key joins. At
 narrow widths it keeps a minimum white-key width and scrolls horizontally rather
 than compressing all 88 keys.
 
-Application icons use the user-supplied `resources/app-icon.png`
-unchanged. The source was recovered from the previous build's embedded bytes
+Application icons use the user-supplied `resources/app-icon.png`, replaced by
+the gradient curve editor artwork on 2026-10-06 as described above. The earlier
+source was recovered from the previous build's embedded bytes
 after the original workspace-root file was removed, so rebuilds retain the icon.
 The user subsequently authorized tracking the renamed source PNG so GitHub
 hosted runners and fresh source checkouts can build with the icon.
@@ -365,7 +502,7 @@ Keyboard status display:
 - Cyan: fully sampled key is quieter and is being boosted
 - Grey: fully sampled key is already near neutral
 - Red: fully sampled key is louder and is being reduced
-- Bright magenta outline: selected key
+- Teal outline: selected key
 
 The sampled-key coverage percentage uses the weakest post-outlier count in
 each velocity region across measured keys. It reaches 100% only when all
@@ -705,6 +842,8 @@ Treat failures found here as higher priority than new features.
 - `src/profile.cpp`: JSON serialization, validation, migration
 - `app/MidiEngine.*`: device lifecycle, capture buffering, routing worker/safety
 - `app/MainComponent.*`: desktop workflow, painting, curve editor, controls
+- `app/Theme.hpp`: shared JUCE control styling and action icons
+- `app/AppIcon.hpp`: embedded icon loading, transparent-margin crop and native sizing
 - `app/Main.cpp`: JUCE application/window setup
 - `app/PluginProcessor.*`: VST3 processor/editor and DAW lifecycle
 - `app/PluginState.*`: per-instance profiles, map publication, DAW state
@@ -719,7 +858,8 @@ Treat failures found here as higher priority than new features.
 - `tools/package_windows_installer.ps1`: pinned NSIS Windows setup packaging
 - `app/DataPaths.hpp`: installed per-user storage and test overrides
 - `installers/`: platform install/uninstall definitions
-- `docs/releases/0.0.2.md`: current release notes, native evidence and security guidance
+- `docs/releases/0.0.3.md`: release-candidate notes, verification gate and security guidance
+- `docs/releases/0.0.2.md`: previous installer release notes and native evidence
 - `docs/releases/0.0.1.md`: historical portable release notes
 - `docs/architecture.md`: concise architectural overview
 - `README.md`: user-facing introduction, calibration, routing, and profile guide
@@ -740,7 +880,7 @@ macOS (11+ target). Unix builds use `build/ci` and
 macOS verifies universal slices, ad-hoc signatures, and AU validation, then
 outputs an unsigned PKG. Native installer/uninstaller smoke checks preserve
 user profiles. Artifacts do not automatically publish releases. Current release
-notes are `docs/releases/0.0.2.md`. Only Windows has real MIDI/DAW evidence.
+notes are `docs/releases/0.0.3.md`. Only Windows has real MIDI/DAW evidence.
 
 For specific debugging or offline-tool work, the separate Debug build remains
 available. It is not the default build for local app delivery. From

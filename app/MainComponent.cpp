@@ -1,31 +1,127 @@
 #include "MainComponent.hpp"
 #include "DataPaths.hpp"
+#include "AppIcon.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <mutex>
+#include <sstream>
+#include <thread>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
+#ifndef VELCAL_VERSION
+#define VELCAL_VERSION "0.0.0"
+#endif
+
+#ifndef VELCAL_ENABLE_UPDATE_CHECK
+#define VELCAL_ENABLE_UPDATE_CHECK 0
+#endif
+
 namespace {
 
-constexpr auto background = 0xff16191d;
-constexpr auto panel = 0xff20252a;
-constexpr auto panelRaised = 0xff282e34;
-constexpr auto textPrimary = 0xfff1f3f4;
-constexpr auto textMuted = 0xff9ea7ad;
-constexpr auto green = 0xff4fc58b;
-constexpr auto amber = 0xffe8ad4b;
-constexpr auto cyan = 0xff62b7c9;
-constexpr auto red = 0xffdc6b69;
-constexpr auto selection = 0xffff4fd8;
+constexpr auto background = velcal_ui::background;
+constexpr auto panel = 0xff162229;
+constexpr auto panelRaised = velcal_ui::surface;
+constexpr auto textPrimary = velcal_ui::text;
+constexpr auto textMuted = velcal_ui::muted;
+constexpr auto amber = 0xffffc567;
+constexpr auto cyan = 0xff3bbce9;
+constexpr auto red = 0xffea929e;
+constexpr auto violet = 0xffb879ef;
 constexpr int firstPianoNote = 21;
 constexpr int lastPianoNote = 108;
 constexpr int pianoWhiteKeyCount = 52;
 constexpr float minimumWhiteKeyWidth = 18.0f;
 constexpr int profileComboBaseId = 1000;
+constexpr int unsavedProfileComboId = 1;
+constexpr int noSavedProfilesComboId = 2;
+constexpr auto unsavedProfileName = "New calibration (unsaved)";
+constexpr const char* githubLatestReleaseApi =
+    "https://api.github.com/repos/SH4DOWSIX/VelCal/releases/latest";
+constexpr const char* githubReleasesPage = "https://github.com/SH4DOWSIX/VelCal/releases";
+
+void paintSurface(juce::Graphics& graphics, juce::Rectangle<float> bounds)
+{
+    graphics.setGradientFill(juce::ColourGradient(juce::Colour(panelRaised), bounds.getTopLeft(),
+        juce::Colour(panel), bounds.getBottomRight(), false));
+    graphics.fillRoundedRectangle(bounds, 6.0f);
+    graphics.setColour(juce::Colour(velcal_ui::border).withAlpha(0.55f));
+    graphics.drawRoundedRectangle(bounds.reduced(0.5f), 6.0f, 1.0f);
+}
+
+void paintCurveTitle(juce::Graphics& graphics, juce::Rectangle<float> bounds, bool global, juce::uint32 green)
+{
+    graphics.setColour(juce::Colour(green));
+    for (int bar = 0; bar < 3; ++bar)
+        graphics.fillRect(bounds.getX() + 18 + bar * 6.0f,
+            bounds.getY() + 30 - bar * 5.0f, 3.0f, 8 + bar * 5.0f);
+    graphics.setColour(juce::Colour(textPrimary));
+    graphics.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+    graphics.drawText(global ? "Global velocity curve" : "Velocity curve (selected key)",
+        bounds.reduced(48, 0).withHeight(46), juce::Justification::centredLeft);
+}
+
+void paintCurveFill(juce::Graphics& graphics, const juce::Path& curve, juce::Rectangle<float> plot, juce::uint32 green)
+{
+    auto fill = curve;
+    fill.lineTo(plot.getBottomRight());
+    fill.lineTo(plot.getBottomLeft());
+    fill.closeSubPath();
+    graphics.setGradientFill(juce::ColourGradient(juce::Colour(green).withAlpha(0.18f),
+        plot.getTopLeft(), juce::Colour(green).withAlpha(0.015f), plot.getBottomLeft(), false));
+    graphics.fillPath(fill);
+}
+
+class AccentPalette final : public juce::Component {
+public:
+    AccentPalette(juce::uint32 current, std::function<juce::uint32(std::size_t)> select)
+    {
+        setLookAndFeel(&lookAndFeel);
+        title.setText("Accent colour", juce::dontSendNotification);
+        title.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+        title.setColour(juce::Label::textColourId, juce::Colour(textPrimary));
+        addAndMakeVisible(title);
+        for (std::size_t i = 0; i < buttons.size(); ++i) {
+            auto& button = buttons[i];
+            const auto& option = velcal_ui::accents[i];
+            button.setButtonText(option.name);
+            button.setTooltip(option.name);
+            button.setColour(juce::TextButton::buttonColourId, juce::Colour(option.colour));
+            button.setColour(juce::TextButton::textColourOffId, juce::Colour(background));
+            button.getProperties().set("velcalSwatch", true);
+            button.getProperties().set("velcalPrimary", option.colour == current);
+            button.onClick = [this, i, select] {
+                const auto selected = select(i);
+                for (std::size_t j = 0; j < buttons.size(); ++j) {
+                    buttons[j].getProperties().set("velcalPrimary", velcal_ui::accents[j].colour == selected);
+                    buttons[j].repaint();
+                }
+            };
+            addAndMakeVisible(button);
+        }
+        setSize(344, 244);
+    }
+
+    ~AccentPalette() override { setLookAndFeel(nullptr); }
+
+    void resized() override
+    {
+        title.setBounds(12, 4, getWidth() - 24, 28);
+        for (std::size_t i = 0; i < buttons.size(); ++i)
+            buttons[i].setBounds(12 + static_cast<int>(i % 4) * 82,
+                40 + static_cast<int>(i / 4) * 48, 74, 40);
+    }
+
+private:
+    velcal_ui::Theme lookAndFeel;
+    juce::Label title;
+    std::array<juce::TextButton, velcal_ui::accents.size()> buttons;
+};
 
 class CaptureGuide final : public juce::Component {
 public:
@@ -123,13 +219,13 @@ const std::array<velcal::VelocityCurveSettings, 5>& defaultCurvePresets()
 void styleSlider(juce::Slider& slider)
 {
     slider.setSliderStyle(juce::Slider::LinearHorizontal);
-    slider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 52, 24);
-    slider.setColour(juce::Slider::trackColourId, juce::Colour(green));
-    slider.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff394147));
+    slider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 58, 32);
+    slider.setColour(juce::Slider::trackColourId, juce::Colour(velcal_ui::accent));
+    slider.setColour(juce::Slider::backgroundColourId, juce::Colour(velcal_ui::border));
     slider.setColour(juce::Slider::thumbColourId, juce::Colour(textPrimary));
     slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(textPrimary));
     slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(panelRaised));
-    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff414a51));
+    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(velcal_ui::border));
 }
 
 double evaluateParametricCurve(
@@ -180,6 +276,124 @@ juce::String regionName(const std::size_t region)
     if (region == 1)
         return "medium";
     return "firm";
+}
+
+std::vector<int> versionParts(juce::String version)
+{
+    version = version.trim();
+    if (version.startsWithIgnoreCase("v"))
+        version = version.substring(1);
+
+    std::vector<int> parts;
+    std::stringstream stream(version.toStdString());
+    std::string segment;
+    while (std::getline(stream, segment, '.')) {
+        const auto suffix = segment.find_first_not_of("0123456789");
+        if (suffix != std::string::npos)
+            segment = segment.substr(0, suffix);
+        parts.push_back(segment.empty() ? 0 : std::stoi(segment));
+    }
+    return parts;
+}
+
+int compareVersions(const juce::String& left, const juce::String& right)
+{
+    auto leftParts = versionParts(left);
+    auto rightParts = versionParts(right);
+    const auto count = std::max(leftParts.size(), rightParts.size());
+    leftParts.resize(count);
+    rightParts.resize(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (leftParts[index] < rightParts[index])
+            return -1;
+        if (leftParts[index] > rightParts[index])
+            return 1;
+    }
+    return 0;
+}
+
+struct UpdateStatus {
+    juce::String text{"Checking for updates"};
+    juce::String tooltip{"Checks the latest VelCal release on GitHub"};
+    bool available{};
+};
+
+class UpdateCheck final {
+public:
+    UpdateCheck()
+    {
+#if VELCAL_ENABLE_UPDATE_CHECK
+        if (juce::SystemStats::getEnvironmentVariable("VELCAL_DISABLE_UPDATE_CHECK", {}) == "1") {
+            status = {"Update check off", "GitHub update checks are disabled", false};
+            return;
+        }
+        worker = std::thread([this] { check(); });
+#else
+        status = {"Update check off", "GitHub update checks are enabled in installed builds", false};
+#endif
+    }
+
+    ~UpdateCheck()
+    {
+        if (worker.joinable())
+            worker.join();
+    }
+
+    UpdateStatus snapshot()
+    {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return status;
+    }
+
+private:
+    void check()
+    {
+        UpdateStatus result{"Update check unavailable", "Could not reach GitHub releases", false};
+        try {
+            const juce::URL url(githubLatestReleaseApi);
+            const auto headers = juce::String("User-Agent: VelCal/")
+                + juce::String(VELCAL_VERSION)
+                + "\r\nAccept: application/vnd.github+json\r\n";
+            int httpStatus = 0;
+            auto stream = url.createInputStream(
+                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                    .withConnectionTimeoutMs(5000)
+                    .withNumRedirectsToFollow(3)
+                    .withStatusCode(&httpStatus)
+                    .withExtraHeaders(headers));
+
+            if (stream != nullptr && httpStatus == 200) {
+                const auto response = stream->readEntireStreamAsString();
+                const auto release = nlohmann::json::parse(response.toStdString());
+                const auto tag = juce::String(release.value("tag_name", std::string{}));
+                if (tag.isNotEmpty()) {
+                    result.available = compareVersions(tag, VELCAL_VERSION) > 0;
+                    result.text = result.available
+                        ? "Update available: " + tag
+                        : "VelCal is up to date";
+                    result.tooltip = result.available
+                        ? "VelCal " + tag + " is available at " + githubReleasesPage
+                        : "Installed version " + juce::String(VELCAL_VERSION);
+                }
+            }
+        } catch (...) {
+            result = {"Update check unavailable", "Could not read GitHub releases", false};
+        }
+
+        const std::lock_guard<std::mutex> lock(mutex);
+        status = std::move(result);
+    }
+
+    std::mutex mutex;
+    UpdateStatus status;
+    std::thread worker;
+};
+
+UpdateCheck& sharedUpdateCheck()
+{
+    // The module owns the worker and cached result, independently of editor lifetimes.
+    static UpdateCheck check;
+    return check;
 }
 
 struct CaptureGuidance {
@@ -285,10 +499,12 @@ MainComponent::MainComponent(PluginState* plugin)
       midiEngine(plugin ? plugin->midi : *ownedMidiEngine)
 {
     setOpaque(true);
+    setLookAndFeel(&theme);
+    brandIcon = velcalAppIcon();
     setWantsKeyboardFocus(true);
 
     titleLabel.setText("VelCal", juce::dontSendNotification);
-    titleLabel.setFont(juce::FontOptions(24.0f, juce::Font::bold));
+    titleLabel.setFont(juce::FontOptions(30.0f, juce::Font::bold));
     titleLabel.setColour(juce::Label::textColourId, juce::Colour(textPrimary));
     addAndMakeVisible(titleLabel);
 
@@ -298,7 +514,7 @@ MainComponent::MainComponent(PluginState* plugin)
         addAndMakeVisible(*button);
     }
 
-    deviceLabel.setText("MIDI input", juce::dontSendNotification);
+    deviceLabel.setText("MIDI INPUT", juce::dontSendNotification);
     deviceLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
     addAndMakeVisible(deviceLabel);
 
@@ -308,7 +524,7 @@ MainComponent::MainComponent(PluginState* plugin)
     midiInputBox.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff414a51));
     addAndMakeVisible(midiInputBox);
 
-    outputLabel.setText("MIDI output", juce::dontSendNotification);
+    outputLabel.setText("MIDI OUTPUT", juce::dontSendNotification);
     outputLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
     addAndMakeVisible(outputLabel);
 
@@ -319,11 +535,12 @@ MainComponent::MainComponent(PluginState* plugin)
     addAndMakeVisible(midiOutputBox);
 
     routingToggle.addListener(this);
+    routingToggle.getProperties().set("velcalRouting", true);
     routingToggle.setColour(juce::ToggleButton::textColourId, juce::Colour(textPrimary));
     routingToggle.setColour(juce::ToggleButton::tickColourId, juce::Colour(green));
     addAndMakeVisible(routingToggle);
 
-    keyGroupLabel.setText("Calibration keys", juce::dontSendNotification);
+    keyGroupLabel.setText("CALIBRATION KEYS", juce::dontSendNotification);
     keyGroupLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
     addAndMakeVisible(keyGroupLabel);
 
@@ -336,7 +553,7 @@ MainComponent::MainComponent(PluginState* plugin)
     addAndMakeVisible(keyGroupBox);
 
     captureButton.addListener(this);
-    captureButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff3c765d));
+    captureButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff148c74));
     captureButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
     addAndMakeVisible(captureButton);
 
@@ -351,14 +568,19 @@ MainComponent::MainComponent(PluginState* plugin)
     addAndMakeVisible(clearProfileButton);
 
     openProfileButton.addListener(this);
-    openProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff3c765d));
+    openProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff20564f));
     openProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
     addAndMakeVisible(openProfileButton);
 
     saveProfileButton.addListener(this);
-    saveProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(panelRaised));
+    saveProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff148c74));
     saveProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
     addAndMakeVisible(saveProfileButton);
+    themeButton.setName("Accent colour");
+    themeButton.setTooltip("Accent colour");
+    themeButton.getProperties().set("velcalIcon", static_cast<int>(velcal_ui::Icon::brush));
+    themeButton.onClick = [this] { showThemePalette(); };
+    addAndMakeVisible(themeButton);
 
     deleteProfileButton.addListener(this);
     deleteProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(panelRaised));
@@ -421,7 +643,9 @@ MainComponent::MainComponent(PluginState* plugin)
     addAndMakeVisible(smoothCurveToggle);
 
     profileBox.addListener(this);
+    profileBox.getProperties().set("velcalKeyboard", true);
     profileBox.setTextWhenNothingSelected("No profile loaded");
+    profileBox.setTextWhenNoChoicesAvailable("No saved profiles");
     profileBox.setColour(juce::ComboBox::backgroundColourId, juce::Colour(panelRaised));
     profileBox.setColour(juce::ComboBox::textColourId, juce::Colour(textPrimary));
     profileBox.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff414a51));
@@ -434,6 +658,32 @@ MainComponent::MainComponent(PluginState* plugin)
     statusLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
+
+    updateStatusLabel.setText("Checking for updates", juce::dontSendNotification);
+    updateStatusLabel.setFont(juce::FontOptions(12.0f));
+    updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
+    updateStatusLabel.setBorderSize(juce::BorderSize<int>(0));
+    updateStatusLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
+    updateStatusLabel.setTooltip("Checks the latest VelCal release on GitHub");
+    addAndMakeVisible(updateStatusLabel);
+    for (auto* label : {&deviceLabel, &outputLabel, &keyGroupLabel})
+        label->setFont(juce::FontOptions(12.0f));
+    const auto setIcon = [](juce::TextButton& button, velcal_ui::Icon icon) {
+        button.getProperties().set("velcalIcon", static_cast<int>(icon));
+        button.setTooltip(button.getButtonText());
+    };
+    setIcon(openProfileButton, velcal_ui::Icon::folder);
+    setIcon(saveProfileButton, velcal_ui::Icon::save);
+    setIcon(deleteProfileButton, velcal_ui::Icon::trash);
+    setIcon(captureButton, velcal_ui::Icon::play);
+    setIcon(newProfileButton, velcal_ui::Icon::file);
+    setIcon(clearProfileButton, velcal_ui::Icon::trash);
+    setIcon(resetKeyButton, velcal_ui::Icon::reset);
+    setIcon(resetGlobalButton, velcal_ui::Icon::reset);
+    setIcon(savePresetButton, velcal_ui::Icon::save);
+    for (auto* button : {&captureButton, &saveProfileButton})
+        button->getProperties().set("velcalPrimary", true);
+    refreshUpdateStatus();
 
     const auto profileDirectoryResult = profileDirectory().createDirectory();
     if (!pluginState) {
@@ -459,6 +709,8 @@ MainComponent::MainComponent(PluginState* plugin)
     if (!profile)
         updateLabels();
     setActiveTab(false);
+    applyAccent(green);
+    loadAppearance();
     updateCaptureControls();
     if (profileDirectoryResult.failed())
         statusLabel.setText("Could not create profile folder: " + profileDirectoryResult.getErrorMessage(),
@@ -468,6 +720,12 @@ MainComponent::MainComponent(PluginState* plugin)
 MainComponent::~MainComponent()
 {
     stopTimer();
+    themePopup.reset();
+    themePalette.reset();
+    for (auto* box : {&profileBox, &midiInputBox, &midiOutputBox, &keyGroupBox, &globalPresetBox})
+        box->hidePopup();
+    captureGuide.reset();
+    setLookAndFeel(nullptr);
     midiInputBox.removeListener(this);
     midiOutputBox.removeListener(this);
     globalPresetBox.removeListener(this);
@@ -490,6 +748,106 @@ MainComponent::~MainComponent()
     maximumVelocitySlider.removeListener(this);
     keyboardScrollBar.removeListener(this);
     smoothCurveToggle.removeListener(this);
+}
+
+void MainComponent::refreshUpdateStatus()
+{
+    const auto status = sharedUpdateCheck().snapshot();
+    if (updateStatusLabel.getText() == status.text)
+        return;
+    updateStatusLabel.setText(status.text, juce::dontSendNotification);
+    updateStatusLabel.setTooltip(status.tooltip);
+    updateStatusLabel.setColour(
+        juce::Label::textColourId,
+        status.available ? juce::Colour(amber) : juce::Colour(textMuted));
+}
+
+void MainComponent::applyAccent(juce::uint32 colour)
+{
+    green = colour;
+    theme.setAccent(colour);
+    for (const auto& option : velcal_ui::accents)
+        if (colour == option.colour)
+            themeButton.setTooltip("Accent colour: " + juce::String(option.name));
+    const auto accent = juce::Colour(colour);
+    for (auto* button : {&captureButton, &saveProfileButton})
+        button->setColour(juce::TextButton::buttonColourId, accent.darker(0.55f));
+    openProfileButton.setColour(juce::TextButton::buttonColourId,
+        juce::Colour(panelRaised).interpolatedWith(accent, 0.22f));
+    for (auto* slider : {&keyAdjustmentSlider, &curvatureSlider, &minimumVelocitySlider, &maximumVelocitySlider})
+        slider->setColour(juce::Slider::trackColourId, accent);
+    routingToggle.setColour(juce::ToggleButton::tickColourId, accent);
+    smoothCurveToggle.setColour(juce::ToggleButton::tickColourId, accent);
+    perKeyTabButton.setColour(juce::TextButton::buttonColourId,
+        showingGlobalCurve ? juce::Colour(panelRaised) : accent.darker(0.65f));
+    globalTabButton.setColour(juce::TextButton::buttonColourId,
+        showingGlobalCurve ? accent.darker(0.65f) : juce::Colour(panelRaised));
+    if (statusLabel.getText() == "Sections connected")
+        statusLabel.setColour(juce::Label::textColourId, accent);
+    repaint();
+}
+
+void MainComponent::loadAppearance()
+{
+    auto colour = static_cast<juce::uint32>(velcal_ui::accent);
+    const auto file = velcalProfileDirectory().getChildFile(".velcal-appearance.json");
+    if (file.existsAsFile()) {
+        try {
+            const auto json = nlohmann::json::parse(file.loadFileAsString().toStdString());
+            const auto name = json.value("accent", std::string{});
+            for (const auto& option : velcal_ui::accents)
+                if (name == option.name)
+                    colour = option.colour;
+        } catch (...) {
+            // A damaged preference must not prevent opening an editor.
+        }
+    }
+    if (green != colour)
+        applyAccent(colour);
+}
+
+void MainComponent::chooseAccent(std::size_t index)
+{
+    if (index >= velcal_ui::accents.size())
+        return;
+    const auto& option = velcal_ui::accents[index];
+    const auto directory = velcalProfileDirectory();
+    const nlohmann::json json{{"accent", option.name}};
+    bool saved = false;
+    if (directory.createDirectory().wasOk()) {
+        juce::TemporaryFile temporary(directory.getChildFile(".velcal-appearance.json"));
+        {
+            juce::FileOutputStream stream(temporary.getFile());
+            const auto bytes = json.dump(2);
+            if (stream.openedOk() && stream.write(bytes.data(), bytes.size())) {
+                stream.flush();
+                saved = stream.getStatus().wasOk();
+            }
+        }
+        if (saved)
+            saved = temporary.overwriteTargetFileWithTemporary();
+    }
+    if (!saved) {
+        statusLabel.setText("Accent colour could not be saved", juce::dontSendNotification);
+        return;
+    }
+    applyAccent(option.colour);
+}
+
+void MainComponent::showThemePalette()
+{
+    themePopup.reset();
+    themePalette = std::make_unique<AccentPalette>(green,
+        [safe = juce::Component::SafePointer<MainComponent>(this)](std::size_t index) {
+            if (safe != nullptr) {
+                safe->chooseAccent(index);
+                return safe->green;
+            }
+            return static_cast<juce::uint32>(velcal_ui::accent);
+        });
+    themePopup = std::make_unique<juce::CallOutBox>(*themePalette, themeButton.getBounds(), this);
+    themePopup->setDismissalMouseClicksAreAlwaysConsumed(true);
+    themePopup->enterModalState(true);
 }
 
 void MainComponent::refreshMidiInputs()
@@ -624,6 +982,10 @@ void MainComponent::refreshProfileList()
     updatingProfileList = true;
     profileFiles.clear();
     profileBox.clear(juce::dontSendNotification);
+    if (profile && profileFile == juce::File{}) {
+        profileBox.addItem(unsavedProfileName, unsavedProfileComboId);
+        profileBox.addSeparator();
+    }
 
     juce::Array<juce::File> files;
     profileDirectory().findChildFiles(
@@ -633,10 +995,17 @@ void MainComponent::refreshProfileList()
         profileFiles.add(file);
         profileBox.addItem(profileDisplayName(file), profileComboBaseId + profileFiles.size() - 1);
     }
-    if (profileFile.existsAsFile() && !profileFiles.contains(profileFile)) {
+    if (profile && profileFile != juce::File{} && !profileFiles.contains(profileFile)) {
         profileFiles.add(profileFile);
         profileBox.addItem(profileDisplayName(profileFile), profileComboBaseId + profileFiles.size() - 1);
     }
+
+    if (files.isEmpty() && !profileFile.existsAsFile()) {
+        profileBox.addItem("No saved profiles", noSavedProfilesComboId);
+        profileBox.setItemEnabled(noSavedProfilesComboId, false);
+    }
+    profileBox.setTextWhenNothingSelected(profileFiles.isEmpty()
+        ? "No saved profiles" : "No profile loaded");
 
     selectProfileInList(profileFile);
     deleteProfileButton.setEnabled(profileFile != juce::File{} && profileFile.existsAsFile());
@@ -653,16 +1022,23 @@ void MainComponent::selectProfileInList(const juce::File& file)
         }
     }
     if (selectedId != 0) {
-        const auto name = profile && !profile->profileName.empty()
-            ? juce::String(profile->profileName) : profileDisplayName(file);
         profileBox.changeItemText(selectedId,
-            name + (profileDirty ? " *" : ""));
+            profileDisplayName(file) + (profileDirty ? " *" : ""));
         profileBox.setSelectedId(selectedId, juce::dontSendNotification);
+        profileBox.setTooltip(file.existsAsFile() ? file.getFullPathName()
+            : file.getFullPathName() + "\nFile missing; the active profile is retained in memory");
     }
-    else if (profile)
-        profileBox.setText(juce::String(profile->profileName) + (profileDirty ? " *" : ""), juce::dontSendNotification);
-    else
+    else if (profile) {
+        if (profileBox.indexOfItemId(unsavedProfileComboId) < 0)
+            profileBox.addItem(unsavedProfileName, unsavedProfileComboId);
+        profileBox.changeItemText(unsavedProfileComboId,
+            juce::String(unsavedProfileName) + (profileDirty ? " *" : ""));
+        profileBox.setSelectedId(unsavedProfileComboId, juce::dontSendNotification);
+        profileBox.setTooltip("This profile has not been saved to a file");
+    } else {
         profileBox.setSelectedId(0, juce::dontSendNotification);
+        profileBox.setTooltip("Open a profile or create a new calibration");
+    }
 }
 
 void MainComponent::comboBoxChanged(juce::ComboBox* comboBox)
@@ -675,8 +1051,11 @@ void MainComponent::comboBoxChanged(juce::ComboBox* comboBox)
         if (updatingProfileList)
             return;
         const auto index = profileBox.getSelectedId() - profileComboBaseId;
-        if (juce::isPositiveAndBelow(index, profileFiles.size()))
-            loadProfile(profileFiles[index]);
+        if (juce::isPositiveAndBelow(index, profileFiles.size())) {
+            const auto file = profileFiles[index];
+            if (!profile || file != profileFile)
+                loadProfile(file);
+        }
         return;
     }
     if (updatingControls)
@@ -712,7 +1091,9 @@ void MainComponent::buttonClicked(juce::Button* button)
     else if (button == &resetKeyButton) {
         if (profile) {
             profile->noteAdjustments[selectedNote] = 0;
+            const auto smooth = profile->noteCurveOverrides[selectedNote].smooth;
             profile->noteCurveOverrides[selectedNote] = {};
+            profile->noteCurveOverrides[selectedNote].smooth = smooth;
             markProfileDirty();
             updateEditingControls();
             updateEffectiveMaps();
@@ -732,8 +1113,15 @@ void MainComponent::buttonClicked(juce::Button* button)
     }
     else if (button == &smoothCurveToggle) {
         if (profile) {
-            ensureEditableCurve();
-            editableCurveSmooth() = smoothCurveToggle.getToggleState();
+            const auto requestedSmooth = smoothCurveToggle.getToggleState();
+            if (showingGlobalCurve) {
+                ensureEditableCurve();
+                profile->globalCurve.smooth = requestedSmooth;
+            } else {
+                for (auto& curve : profile->noteCurveOverrides)
+                    curve.smooth = requestedSmooth;
+            }
+            smoothCurveToggle.setToggleState(requestedSmooth, juce::dontSendNotification);
             markProfileDirty();
             updateEffectiveMaps();
             repaint();
@@ -953,6 +1341,11 @@ void MainComponent::updateCaptureControls()
 
 void MainComponent::timerCallback()
 {
+    if (++appearancePollTicks >= 12) {
+        appearancePollTicks = 0;
+        loadAppearance();
+    }
+    refreshUpdateStatus();
     if (pluginState)
         syncPluginState();
     const auto activity = midiEngine.getActivity();
@@ -1292,10 +1685,12 @@ void MainComponent::setActiveTab(const bool globalCurveTab)
     showingGlobalCurve = globalCurveTab;
     perKeyTabButton.setColour(
         juce::TextButton::buttonColourId,
-        juce::Colour(globalCurveTab ? panelRaised : 0xff3c765d));
+        globalCurveTab ? juce::Colour(panelRaised) : juce::Colour(green).darker(0.65f));
     globalTabButton.setColour(
         juce::TextButton::buttonColourId,
-        juce::Colour(globalCurveTab ? 0xff3c765d : panelRaised));
+        globalCurveTab ? juce::Colour(green).darker(0.65f) : juce::Colour(panelRaised));
+    perKeyTabButton.getProperties().set("velcalPrimary", !globalCurveTab);
+    globalTabButton.getProperties().set("velcalPrimary", globalCurveTab);
 
     for (auto* component : std::array<juce::Component*, 8>{
              &keyGroupLabel, &keyGroupBox, &captureButton, &newProfileButton,
@@ -1494,14 +1889,9 @@ std::vector<velcal::VelocityCurvePoint> MainComponent::sampledCurrentCurve() con
         }
     } else {
         const auto adjustment = profile->noteAdjustments[selectedNote];
-        for (const auto input : sampleInputs) {
-            points.push_back({
-                static_cast<double>(input),
-                static_cast<double>(std::clamp(
-                    static_cast<int>(profile->generated.noteMaps[selectedNote].apply(
-                        static_cast<std::uint8_t>(input))) + adjustment,
-                    1, 127))});
-        }
+        points = velcal::smoothCalibrationPoints(profile->generated.noteMaps[selectedNote]);
+        for (auto& point : points)
+            point.output = std::clamp(point.output + adjustment, 1.0, 127.0);
     }
     return points;
 }
@@ -1511,7 +1901,7 @@ juce::Rectangle<float> MainComponent::curvePlotBounds() const
     return curveBounds
         .withTrimmedLeft(58.0f)
         .withTrimmedRight(28.0f)
-        .withTrimmedTop(28.0f)
+        .withTrimmedTop(58.0f)
         .withTrimmedBottom(48.0f);
 }
 
@@ -1594,7 +1984,10 @@ void MainComponent::paintCurveHandles(
         - static_cast<float>((selected.output - 1.0) / 126.0) * plot.getHeight();
     const auto text = "Input " + juce::String(static_cast<int>(std::lround(selected.input)))
         + "  |  Output " + juce::String(static_cast<int>(std::lround(selected.output)));
-    constexpr float bubbleWidth = 142.0f;
+    const juce::Font coordinateFont(juce::FontOptions(12.0f));
+    const auto bubbleWidth = std::ceil(std::max(
+        juce::GlyphArrangement::getStringWidth(coordinateFont, text),
+        juce::GlyphArrangement::getStringWidth(coordinateFont, "Input 127  |  Output 127"))) + 20.0f;
     constexpr float bubbleHeight = 28.0f;
     auto bubbleX = pointX + 12.0f;
     if (bubbleX + bubbleWidth > plot.getRight())
@@ -1602,14 +1995,16 @@ void MainComponent::paintCurveHandles(
     auto bubbleY = pointY - bubbleHeight - 12.0f;
     if (bubbleY < plot.getY())
         bubbleY = pointY + 12.0f;
+    bubbleX = std::clamp(bubbleX, plot.getX(), plot.getRight() - bubbleWidth);
+    bubbleY = std::clamp(bubbleY, plot.getY(), plot.getBottom() - bubbleHeight);
     const auto bubble = juce::Rectangle<float>(bubbleX, bubbleY, bubbleWidth, bubbleHeight);
     graphics.setColour(juce::Colour(0xff111519).withAlpha(0.96f));
     graphics.fillRoundedRectangle(bubble, 4.0f);
     graphics.setColour(juce::Colour(green));
     graphics.drawRoundedRectangle(bubble, 4.0f, 1.0f);
     graphics.setColour(juce::Colour(textPrimary));
-    graphics.setFont(12.0f);
-    graphics.drawText(text, bubble.reduced(8.0f, 2.0f), juce::Justification::centred);
+    graphics.setFont(coordinateFont);
+    graphics.drawText(text, bubble.reduced(8.0f, 2.0f), juce::Justification::centred, false);
 }
 
 void MainComponent::updateEffectiveMaps()
@@ -1690,8 +2085,12 @@ void MainComponent::updateEditingControls()
             profile->globalCurve.maximumOutput, juce::dontSendNotification);
         const auto smooth = showingGlobalCurve
             ? profile->globalCurve.smooth
-            : profile->noteCurveOverrides[selectedNote].smooth;
+            : std::all_of(profile->noteCurveOverrides.begin(), profile->noteCurveOverrides.end(),
+                [](const auto& curve) { return curve.smooth; });
         smoothCurveToggle.setToggleState(smooth, juce::dontSendNotification);
+        smoothCurveToggle.setTooltip(showingGlobalCurve
+            ? "Smooth the global velocity curve"
+            : "Smooth the velocity curves for all keys");
     }
     updatingControls = false;
 }
@@ -1699,7 +2098,8 @@ void MainComponent::updateEditingControls()
 void MainComponent::updateLabels()
 {
     if (!profile) {
-        profileBox.setText("No profile loaded", juce::dontSendNotification);
+        profileBox.setText(profileFiles.isEmpty() ? "No saved profiles" : "No profile loaded",
+            juce::dontSendNotification);
         selectedNoteLabel.setText(
             showingGlobalCurve ? "Global velocity curve" : "No calibrated note",
             juce::dontSendNotification);
@@ -1727,46 +2127,61 @@ void MainComponent::updateLabels()
     statusLabel.setText(
         profile->generated.segmentsConnected ? "Sections connected" : "Sections disconnected",
         juce::dontSendNotification);
+    statusLabel.setColour(juce::Label::textColourId,
+        juce::Colour(profile->generated.segmentsConnected ? green : amber));
 }
 
 void MainComponent::resized()
 {
     if (captureGuide)
         captureGuide->setBounds(getLocalBounds());
+    updateStatusLabel.setBounds(
+        getLocalBounds().reduced(28).removeFromBottom(24).removeFromLeft(217));
     auto area = getLocalBounds().reduced(28);
-    auto header = area.removeFromTop(48);
-    titleLabel.setBounds(header.removeFromLeft(180));
-    saveProfileButton.setBounds(header.removeFromRight(122).reduced(0, 5));
-    header.removeFromRight(8);
-    deleteProfileButton.setBounds(header.removeFromRight(84).reduced(0, 5));
-    header.removeFromRight(8);
-    openProfileButton.setBounds(header.removeFromRight(122).reduced(0, 5));
-    header.removeFromRight(8);
-    profileBox.setBounds(header.reduced(12, 5));
+    auto header = area.removeFromTop(52);
+    const auto compact = getWidth() < 1100;
+    auto brand = header.removeFromLeft(245);
+    brand.removeFromLeft(64);
+    titleLabel.setBounds(brand);
+    saveProfileButton.setBounds(header.removeFromRight(compact ? 120 : 146));
+    themeButton.setBounds(saveProfileButton.getRight() - 38, saveProfileButton.getBottom() + 18, 38, 38);
+    if (themePopup)
+        themePopup->updatePosition(themeButton.getBounds(), getLocalBounds());
+    header.removeFromRight(12);
+    deleteProfileButton.setBounds(header.removeFromRight(compact ? 92 : 110));
+    header.removeFromRight(12);
+    openProfileButton.setBounds(header.removeFromRight(compact ? 120 : 146));
+    header.removeFromRight(20);
+    header.removeFromLeft(28);
+    profileBox.setBounds(header);
 
     area.removeFromTop(18);
     auto sidebar = area.removeFromLeft(245).withTrimmedRight(28);
     if (!pluginState) {
         deviceLabel.setBounds(sidebar.removeFromTop(24));
-        midiInputBox.setBounds(sidebar.removeFromTop(38));
-        sidebar.removeFromTop(18);
+        midiInputBox.setBounds(sidebar.removeFromTop(44));
+        sidebar.removeFromTop(20);
         outputLabel.setBounds(sidebar.removeFromTop(24));
-        midiOutputBox.setBounds(sidebar.removeFromTop(38));
-        sidebar.removeFromTop(12);
-        routingToggle.setBounds(sidebar.removeFromTop(32));
-        sidebar.removeFromTop(14);
+        midiOutputBox.setBounds(sidebar.removeFromTop(44));
+        sidebar.removeFromTop(18);
+        routingToggle.setBounds(sidebar.removeFromTop(36));
+        sidebar.removeFromTop(18);
     }
 
     auto globalSidebar = sidebar;
     keyGroupLabel.setBounds(sidebar.removeFromTop(24));
-    keyGroupBox.setBounds(sidebar.removeFromTop(38));
-    sidebar.removeFromTop(10);
-    captureButton.setBounds(sidebar.removeFromTop(38));
-    sidebar.removeFromTop(10);
-    auto profileActions = sidebar.removeFromTop(34);
+    keyGroupBox.setBounds(sidebar.removeFromTop(44));
+    sidebar.removeFromTop(14);
+    captureButton.setBounds(sidebar.removeFromTop(44));
+    sidebar.removeFromTop(14);
+    auto profileActions = sidebar.removeFromTop(40);
     newProfileButton.setBounds(profileActions.removeFromLeft(104));
     profileActions.removeFromLeft(8);
     clearProfileButton.setBounds(profileActions);
+    sidebar.removeFromTop(32);
+    const auto metricsHeight = std::min(212, updateStatusLabel.getY() - 12 - sidebar.getY());
+    metricsBounds = juce::Rectangle<float>(28.0f, static_cast<float>(sidebar.getY()),
+        217.0f, static_cast<float>(std::max(0, metricsHeight)));
 
     presetLabel.setBounds(globalSidebar.removeFromTop(24));
     globalPresetBox.setBounds(globalSidebar.removeFromTop(38));
@@ -1786,30 +2201,32 @@ void MainComponent::resized()
     resetGlobalButton.setBounds(globalActions);
 
     area.removeFromLeft(28);
-    auto tabs = area.removeFromTop(34);
-    perKeyTabButton.setBounds(tabs.removeFromLeft(166));
-    tabs.removeFromLeft(8);
-    globalTabButton.setBounds(tabs.removeFromLeft(132));
-    area.removeFromTop(10);
-    auto selectedHeader = area.removeFromTop(36);
-    selectedNoteLabel.setBounds(selectedHeader.removeFromLeft(300));
-    smoothCurveToggle.setBounds(selectedHeader.removeFromLeft(90));
+    auto tabs = area.removeFromTop(42);
+    perKeyTabButton.setBounds(tabs.removeFromLeft(190));
+    tabs.removeFromLeft(4);
+    globalTabButton.setBounds(tabs.removeFromLeft(150));
+    area.removeFromTop(14);
+    auto selectedHeader = area.removeFromTop(44);
+    selectedNoteLabel.setBounds(selectedHeader.removeFromLeft(compact ? 200 : 300));
+    smoothCurveToggle.setBounds(selectedHeader.removeFromLeft(112));
     statusLabel.setBounds(selectedHeader);
-    area.removeFromTop(8);
+    area.removeFromTop(12);
+    adjustmentBounds = {};
     if (!showingGlobalCurve) {
-        auto keyEditor = area.removeFromTop(38);
-        keyAdjustmentLabel.setBounds(keyEditor.removeFromLeft(170));
-        keyAdjustmentSlider.setBounds(keyEditor.removeFromLeft(250));
-        keyEditor.removeFromLeft(8);
-        resetKeyButton.setBounds(keyEditor.removeFromLeft(90));
-        area.removeFromTop(10);
+        adjustmentBounds = area.removeFromTop(58).toFloat();
+        auto keyEditor = adjustmentBounds.toNearestInt().reduced(14, 9);
+        keyAdjustmentLabel.setBounds(keyEditor.removeFromLeft(compact ? 145 : 180));
+        resetKeyButton.setBounds(keyEditor.removeFromRight(compact ? 102 : 128));
+        keyEditor.removeFromRight(14);
+        keyAdjustmentSlider.setBounds(keyEditor);
+        area.removeFromTop(12);
     }
     keyboardBounds = showingGlobalCurve
         ? juce::Rectangle<float>{}
-        : area.removeFromTop(std::min(182, area.getHeight() / 3)).toFloat();
+        : area.removeFromTop(std::min(166, area.getHeight() / 3)).toFloat();
     if (!showingGlobalCurve) {
         auto keyArea = keyboardBounds.reduced(14.0f, 8.0f);
-        keyArea.removeFromBottom(22.0f);
+        keyArea.removeFromBottom(30.0f);
         const auto contentWidth = std::max(
             keyArea.getWidth(), minimumWhiteKeyWidth * pianoWhiteKeyCount);
         const auto needsScrolling = contentWidth > keyArea.getWidth() + 0.5f;
@@ -1837,7 +2254,20 @@ void MainComponent::paint(juce::Graphics& graphics)
 {
     graphics.fillAll(juce::Colour(background));
     graphics.setColour(juce::Colour(panel));
-    graphics.fillRect(juce::Rectangle<float>(0.0f, 86.0f, 273.0f, static_cast<float>(getHeight() - 86)));
+    graphics.fillRoundedRectangle(
+        juce::Rectangle<float>(16.0f, 90.0f, 245.0f, static_cast<float>(getHeight() - 106)), 8.0f);
+    graphics.setColour(juce::Colour(velcal_ui::border).withAlpha(0.4f));
+    graphics.drawRoundedRectangle(
+        juce::Rectangle<float>(16.5f, 90.5f, 244.0f, static_cast<float>(getHeight() - 107)), 8.0f, 1.0f);
+    graphics.saveState();
+    graphics.setOpacity(1.0f);
+    graphics.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+    graphics.drawImageWithin(brandIcon, 28, 28, 52, 52, juce::RectanglePlacement::centred);
+    graphics.restoreState();
+    if (!adjustmentBounds.isEmpty())
+        paintSurface(graphics, adjustmentBounds);
+    graphics.setColour(juce::Colour(velcal_ui::border).withAlpha(0.55f));
+    graphics.drawHorizontalLine(150, 301.0f, static_cast<float>(getWidth() - 28));
 
     if (!profile) {
         graphics.setColour(juce::Colour(textMuted));
@@ -1850,19 +2280,27 @@ void MainComponent::paint(juce::Graphics& graphics)
     if (showingGlobalCurve) {
         paintGlobalCurve(graphics, curveBounds);
     } else {
-        auto sidebar = juce::Rectangle<float>(28.0f, 465.0f, 217.0f, 270.0f);
+        auto sidebar = metricsBounds;
+        const auto metricHeight = (sidebar.getHeight() - 20.0f) / 3.0f;
+        graphics.setColour(juce::Colour(textMuted));
+        graphics.setFont(11.0f);
+        graphics.drawText("STATISTICS", metricsBounds.withY(metricsBounds.getY() - 24).withHeight(18),
+            juce::Justification::centredLeft);
+        graphics.setColour(juce::Colour(velcal_ui::border));
+        graphics.drawLine(metricsBounds.getX() + 82, metricsBounds.getY() - 15,
+            metricsBounds.getRight(), metricsBounds.getY() - 15);
         const auto& coverage = profile->generated.coverage;
-        paintMetric(graphics, sidebar.removeFromTop(72.0f), "VALID PRESSES",
+        paintMetric(graphics, sidebar.removeFromTop(metricHeight), "VALID PRESSES",
             juce::String(coverage.lowPresses + coverage.mediumPresses + coverage.highPresses),
             juce::Colour(green));
-        sidebar.removeFromTop(12.0f);
-        paintMetric(graphics, sidebar.removeFromTop(72.0f), "SAMPLED KEY COVERAGE",
+        sidebar.removeFromTop(10.0f);
+        paintMetric(graphics, sidebar.removeFromTop(metricHeight), "SAMPLED KEY COVERAGE",
             juce::String(static_cast<int>(std::lround(coverage.score * 100.0))) + "%",
-            coverage.score >= 0.8 ? juce::Colour(green) : juce::Colour(amber));
-        sidebar.removeFromTop(12.0f);
-        paintMetric(graphics, sidebar.removeFromTop(72.0f), "SECTIONS",
+            juce::Colour(cyan));
+        sidebar.removeFromTop(10.0f);
+        paintMetric(graphics, sidebar.removeFromTop(metricHeight), "SECTIONS",
             juce::String(profile->generated.segmentAlignments.size()),
-            profile->generated.segmentsConnected ? juce::Colour(green) : juce::Colour(red));
+            juce::Colour(violet));
 
         paintKeyboard(graphics, keyboardBounds);
         paintCurve(graphics, curveBounds);
@@ -1876,22 +2314,40 @@ void MainComponent::paintMetric(
     const juce::String& value,
     const juce::Colour accent)
 {
-    graphics.setColour(juce::Colour(panelRaised));
-    graphics.fillRoundedRectangle(bounds, 5.0f);
+    paintSurface(graphics, bounds);
     graphics.setColour(accent);
-    graphics.fillRect(bounds.withWidth(4.0f));
+    graphics.fillRoundedRectangle(bounds.withWidth(5.0f), 2.5f);
+    auto symbol = bounds.reduced(16, 18).withWidth(24);
+    if (label == "VALID PRESSES") {
+        juce::Path pulse;
+        pulse.startNewSubPath(symbol.getX(), symbol.getCentreY());
+        pulse.lineTo(symbol.getX() + 6, symbol.getCentreY());
+        pulse.lineTo(symbol.getX() + 10, symbol.getY());
+        pulse.lineTo(symbol.getX() + 15, symbol.getBottom());
+        pulse.lineTo(symbol.getX() + 19, symbol.getCentreY());
+        pulse.lineTo(symbol.getRight(), symbol.getCentreY());
+        graphics.strokePath(pulse, juce::PathStrokeType(1.8f));
+    } else if (label == "SECTIONS") {
+        for (int row = 0; row < 2; ++row)
+            for (int column = 0; column < 2; ++column)
+                graphics.drawRect(symbol.getX() + column * 13, symbol.getY() + row * 13, 8.0f, 8.0f, 1.8f);
+    } else {
+        graphics.fillEllipse(symbol.withSizeKeepingCentre(24, 24));
+        graphics.setColour(juce::Colour(panel));
+        graphics.drawLine(symbol.getCentreX(), symbol.getCentreY(), symbol.getCentreX(), symbol.getY(), 1.5f);
+    }
+    auto content = bounds.withTrimmedLeft(52).reduced(0, 8);
     graphics.setColour(juce::Colour(textMuted));
-    graphics.setFont(11.0f);
-    graphics.drawText(label, bounds.reduced(14.0f).removeFromTop(18.0f), juce::Justification::left);
+    graphics.setFont(10.0f);
+    graphics.drawText(label, content.removeFromTop(18), juce::Justification::left);
     graphics.setColour(juce::Colour(textPrimary));
-    graphics.setFont(22.0f);
-    graphics.drawText(value, bounds.reduced(14.0f), juce::Justification::centredLeft);
+    graphics.setFont(juce::FontOptions(22.0f, juce::Font::bold));
+    graphics.drawText(value, content, juce::Justification::centredLeft);
 }
 
 void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangle<float> bounds)
 {
-    graphics.setColour(juce::Colour(panel));
-    graphics.fillRoundedRectangle(bounds, 5.0f);
+    paintSurface(graphics, bounds);
     if (keyboardKeyBounds.isEmpty())
         return;
 
@@ -1910,7 +2366,8 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
             originX + whiteIndex * whiteWidth,
             keyboardKeyBounds.getY(), whiteWidth, keyboardKeyBounds.getHeight());
         const auto& stats = profile->generated.noteStats[static_cast<std::size_t>(note)];
-        graphics.setColour(juce::Colour(0xffe2e5e4));
+        graphics.setGradientFill(juce::ColourGradient(juce::Colour(0xfff8fafb), key.getTopLeft(),
+            juce::Colour(0xffd6dfe3), key.getBottomLeft(), false));
         graphics.fillRect(key);
         graphics.setColour(juce::Colour(0xffaab0b2));
         graphics.drawRect(key, 1.0f);
@@ -1923,7 +2380,7 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
             graphics.fillRect(key.removeFromBottom(10.0f).reduced(1.0f, 0.0f));
         }
         if (note == selectedNote) {
-            graphics.setColour(juce::Colour(selection));
+            graphics.setColour(juce::Colour(green));
             graphics.drawRect(juce::Rectangle<float>(
                 originX + whiteIndex * whiteWidth,
                 keyboardKeyBounds.getY(), whiteWidth, keyboardKeyBounds.getHeight()), 2.0f);
@@ -1941,7 +2398,8 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
             originX + whiteIndex * whiteWidth - blackWidth * 0.5f,
             keyboardKeyBounds.getY(), blackWidth, keyboardKeyBounds.getHeight() * 0.64f);
         const auto& stats = profile->generated.noteStats[static_cast<std::size_t>(note)];
-        graphics.setColour(juce::Colour(0xff292e32));
+        graphics.setGradientFill(juce::ColourGradient(juce::Colour(0xff11181d), key.getTopLeft(),
+            juce::Colour(0xff35434b), key.getBottomLeft(), false));
         graphics.fillRoundedRectangle(key, 1.5f);
         if (stats.samplesSeen != 0) {
             const auto statusColour = !hasCompleteRegionalCoverage(
@@ -1952,15 +2410,15 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
             graphics.fillRect(key.withTop(key.getBottom() - 9.0f).reduced(1.0f, 0.0f));
         }
         if (note == selectedNote) {
-            graphics.setColour(juce::Colour(selection));
+            graphics.setColour(juce::Colour(green));
             graphics.drawRoundedRectangle(key, 1.5f, 2.0f);
         }
     }
     graphics.restoreState();
 
-    auto legend = bounds.reduced(16.0f, 7.0f).removeFromBottom(16.0f);
+    auto legend = bounds.reduced(16.0f, 7.0f).removeFromBottom(22.0f);
     const std::array<std::pair<juce::Colour, juce::String>, 5> items{{
-        {juce::Colour(panel), "No data"},
+        {juce::Colour(0xff607985), "No data"},
         {juce::Colour(amber), "Needs data"},
         {juce::Colour(cyan), "Boosted"},
         {juce::Colour(0xff69737a), "Neutral"},
@@ -1969,24 +2427,24 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
     const auto itemWidth = legend.getWidth() / static_cast<float>(items.size());
     for (const auto& item : items) {
         auto itemBounds = legend.removeFromLeft(itemWidth);
-        const auto swatch = itemBounds.removeFromLeft(10.0f).reduced(0.0f, 3.0f);
+        const auto swatch = itemBounds.removeFromLeft(13.0f).withSizeKeepingCentre(13, 13);
         graphics.setColour(item.first);
-        graphics.fillRect(swatch);
+        graphics.fillRoundedRectangle(swatch, 2.0f);
         if (item.second == "No data") {
             graphics.setColour(juce::Colour(0xff69737a));
             graphics.drawRect(swatch);
         }
         itemBounds.removeFromLeft(5.0f);
         graphics.setColour(juce::Colour(textMuted));
-        graphics.setFont(10.0f);
+        graphics.setFont(11.0f);
         graphics.drawText(item.second, itemBounds, juce::Justification::centredLeft);
     }
 }
 
 void MainComponent::paintCurve(juce::Graphics& graphics, const juce::Rectangle<float> bounds)
 {
-    graphics.setColour(juce::Colour(panel));
-    graphics.fillRoundedRectangle(bounds, 5.0f);
+    paintSurface(graphics, bounds);
+    paintCurveTitle(graphics, bounds, false, green);
     const auto plot = curvePlotBounds();
     paintCurveAxes(graphics, plot);
 
@@ -1999,21 +2457,23 @@ void MainComponent::paintCurve(juce::Graphics& graphics, const juce::Rectangle<f
     const auto& map = profile->generated.noteMaps[selectedNote];
     const auto& overrideCurve = profile->noteCurveOverrides[selectedNote];
     const auto adjustment = profile->noteAdjustments[selectedNote];
+    std::vector<velcal::VelocityCurvePoint> automaticPoints;
+    if (overrideCurve.points.empty()) {
+        if (overrideCurve.smooth)
+            automaticPoints = velcal::smoothCalibrationPoints(map);
+        else {
+            automaticPoints.reserve(127);
+            for (int input = 1; input <= 127; ++input)
+                automaticPoints.push_back({static_cast<double>(input),
+                    static_cast<double>(map.apply(static_cast<std::uint8_t>(input)))});
+        }
+    }
+    const auto& displayPoints = overrideCurve.points.empty() ? automaticPoints : overrideCurve.points;
     juce::Path curve;
     const auto samples = std::max(256, static_cast<int>(plot.getWidth()));
     for (int sample = 0; sample < samples; ++sample) {
         const auto input = 1.0 + 126.0 * sample / static_cast<double>(samples - 1);
-        double output = 1.0;
-        if (!overrideCurve.points.empty()) {
-            output = velcal::evaluateVelocityCurve(
-                overrideCurve.points, overrideCurve.smooth, input);
-        } else {
-            const auto lower = static_cast<int>(std::floor(input));
-            const auto upper = std::min(127, lower + 1);
-            const auto fraction = input - lower;
-            output = map.apply(static_cast<std::uint8_t>(lower)) * (1.0 - fraction)
-                + map.apply(static_cast<std::uint8_t>(upper)) * fraction;
-        }
+        auto output = velcal::evaluateVelocityCurve(displayPoints, overrideCurve.smooth, input);
         output = std::clamp(output + adjustment, 1.0, 127.0);
         const auto x = plot.getX() + static_cast<float>((input - 1.0) / 126.0) * plot.getWidth();
         const auto y = plot.getBottom()
@@ -2023,6 +2483,7 @@ void MainComponent::paintCurve(juce::Graphics& graphics, const juce::Rectangle<f
         else
             curve.lineTo(x, y);
     }
+    paintCurveFill(graphics, curve, plot, green);
     graphics.setColour(juce::Colour(green));
     graphics.strokePath(curve, juce::PathStrokeType(2.5f));
     paintCurveHandles(
@@ -2035,8 +2496,8 @@ void MainComponent::paintGlobalCurve(
     juce::Graphics& graphics,
     const juce::Rectangle<float> bounds)
 {
-    graphics.setColour(juce::Colour(panel));
-    graphics.fillRoundedRectangle(bounds, 5.0f);
+    paintSurface(graphics, bounds);
+    paintCurveTitle(graphics, bounds, true, green);
     const auto plot = curvePlotBounds();
     paintCurveAxes(graphics, plot);
 
@@ -2062,6 +2523,7 @@ void MainComponent::paintGlobalCurve(
         else
             curve.lineTo(x, y);
     }
+    paintCurveFill(graphics, curve, plot, green);
     graphics.setColour(juce::Colour(green));
     graphics.strokePath(curve, juce::PathStrokeType(3.0f));
     paintCurveHandles(

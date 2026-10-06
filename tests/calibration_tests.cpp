@@ -331,6 +331,56 @@ void globalVelocityCurvesAreMonotonic()
         "editable curve passes through its control points");
 }
 
+void automaticSmoothingRemovesKinksWithoutLosingCalibration()
+{
+    auto kink = velcal::VelocityMap::identity();
+    kink.values[40] = 41;
+    const auto points = velcal::smoothCalibrationPoints(kink);
+    expect(points.size() < 127, "automatic smoothing does not anchor every quantized MIDI step");
+    expect(std::abs(velcal::evaluateVelocityCurve(points, true, 39.5) - 39.5) < 1.0e-8,
+        "automatic smoothing removes a small kink between the broad calibration anchors");
+    expect(velcal::makeVelocityCurve(points, true).apply(40) == 40 && kink.apply(40) == 41,
+        "smoothing affects MIDI correction without modifying the original calibration");
+
+    auto abrupt = velcal::VelocityMap::identity();
+    for (int input = 1; input <= 127; ++input)
+        abrupt.values[static_cast<std::size_t>(input)] = static_cast<std::uint8_t>(
+            input < 64 ? std::max(1, input / 2) : std::min(127, input + 20));
+    for (const auto& map : {velcal::VelocityMap::identity(), kink,
+             velcal::makeVelocityCurve(-0.45), abrupt}) {
+        const auto fitted = velcal::smoothCalibrationPoints(map);
+        const auto output = velcal::makeVelocityCurve(fitted, true);
+        expect(output.isMonotonic(), "automatic smoothing remains monotonic");
+        expect(output.apply(1) == map.apply(1) && output.apply(127) == map.apply(127),
+            "automatic smoothing preserves calibrated endpoints");
+        for (int input = 1; input <= 127; ++input)
+            expect(std::abs(velcal::evaluateVelocityCurve(fitted, true, input)
+                    - map.apply(static_cast<std::uint8_t>(input))) <= 1.0 + 1.0e-8,
+                "adaptive smoothing preserves significant calibration detail within one velocity step");
+    }
+
+    velcal::CalibrationProfile profile;
+    profile.generated = velcal::calibrate({});
+    profile.generated.noteMaps[60] = kink;
+    expect(velcal::effectiveMaps(profile)[60].apply(40) == 40,
+        "automatic Smooth on uses the same fit as the graph");
+    profile.noteCurveOverrides[60].smooth = false;
+    expect(velcal::effectiveMaps(profile)[60].values == kink.values,
+        "automatic Smooth off restores the complete original MIDI map");
+    profile.noteCurveOverrides[60].smooth = true;
+    expect(velcal::effectiveMaps(profile)[60].apply(40) == 40,
+        "automatic Smooth off/on restores the same smoothed map");
+    profile.noteCurveOverrides[60].points = {{1, 1}, {40, 60}, {127, 127}};
+    expect(velcal::effectiveMaps(profile)[60].apply(40) == 60,
+        "manual curve control points are not replaced by automatic smoothing");
+    profile.noteCurveOverrides[60].smooth = false;
+    const auto recalled = velcal::deserializeProfile(velcal::serializeProfile(profile));
+    for (const auto& curve : recalled.noteCurveOverrides)
+        expect(!curve.smooth, "legacy mixed per-key smoothing loads as whole-keyboard Smooth off");
+    expect(recalled.noteCurveOverrides[60].points.size() == 3,
+        "legacy smoothing normalization preserves manual curve points");
+}
+
 void crowdedCurvePointsRemainEditable()
 {
     std::vector<velcal::VelocityCurvePoint> points{
@@ -447,6 +497,7 @@ int main()
     overlappingShortSectionsAreAligned();
     profileRoundTripPreservesMeasurementsAndMaps();
     globalVelocityCurvesAreMonotonic();
+    automaticSmoothingRemovesKinksWithoutLosingCalibration();
     crowdedCurvePointsRemainEditable();
     coverageRequiresEachSampledKeyAndRejectsOutliers();
     failedProfileSavesPreservePreviousFile();
