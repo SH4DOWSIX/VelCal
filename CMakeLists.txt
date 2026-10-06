@@ -105,6 +105,8 @@ if(VELCAL_BUILD_APP)
         app/MainComponent.hpp
         app/Theme.hpp
         app/AppIcon.hpp
+        app/UpdateCheck.cpp
+        app/UpdateCheck.hpp
         app/MidiEngine.cpp
         app/MidiEngine.hpp
         app/PluginState.cpp
@@ -131,7 +133,7 @@ if(VELCAL_BUILD_APP)
         juce_add_console_app(velcal_app_tests PRODUCT_NAME "VelCal app tests")
         juce_generate_juce_header(velcal_app_tests)
         target_sources(velcal_app_tests PRIVATE
-            tests/app_tests.cpp app/MidiEngine.cpp app/MainComponent.cpp app/PluginState.cpp)
+            tests/app_tests.cpp app/MidiEngine.cpp app/MainComponent.cpp app/PluginState.cpp app/UpdateCheck.cpp)
         target_include_directories(velcal_app_tests PRIVATE app)
         target_compile_features(velcal_app_tests PRIVATE cxx_std_17)
         target_compile_definitions(velcal_app_tests PRIVATE
@@ -182,7 +184,7 @@ function(velcal_add_plugin target format midi_effect)
     juce_generate_juce_header(${target})
     target_sources(${target} PRIVATE app/PluginProcessor.cpp app/PluginProcessor.hpp
         app/PluginState.cpp app/PluginState.hpp app/MainComponent.cpp app/MainComponent.hpp
-        app/Theme.hpp app/AppIcon.hpp app/MidiEngine.cpp app/MidiEngine.hpp)
+        app/Theme.hpp app/AppIcon.hpp app/UpdateCheck.cpp app/UpdateCheck.hpp app/MidiEngine.cpp app/MidiEngine.hpp)
     target_include_directories(${target} PUBLIC app)
     target_compile_features(${target} PUBLIC cxx_std_17)
     target_compile_definitions(${target} PUBLIC

@@ -5,9 +5,9 @@
 
 inline juce::Image velcalAppIcon()
 {
-    static const auto icon = [] {
-        const auto source = juce::ImageFileFormat::loadFrom(
-            VelCalIcon::appicon_png, VelCalIcon::appicon_pngSize);
+    const auto icon = [] {
+        const auto source = juce::SoftwareImageType{}.convert(juce::ImageFileFormat::loadFrom(
+            VelCalIcon::appicon_png, VelCalIcon::appicon_pngSize));
         if (source.isNull())
             return source;
         int left = source.getWidth();
@@ -36,7 +36,7 @@ inline juce::Image velcalAppIcon()
 
 inline juce::Image velcalWindowIcon()
 {
-    juce::Image icon(juce::Image::ARGB, 128, 128, true);
+    juce::Image icon(juce::Image::ARGB, 128, 128, true, juce::SoftwareImageType{});
     juce::Graphics graphics(icon);
     graphics.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
     graphics.drawImageWithin(velcalAppIcon(), 0, 0, 128, 128, juce::RectanglePlacement::centred);

@@ -53,6 +53,48 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Fresh verification authorized (2026-10-06): the user requested pushing all
+changes since the last push and dispatching all three native installer jobs.
+These builds must include the shutdown lifecycle fixes and remembered-tab
+preference, so earlier passing installers are not substitutes. Await the user's
+build-result notice without automatic polling. Do not publish 0.0.3: the user
+will separately request release publication after successful builds.
+
+Last-tab preference (2026-10-06): user tab clicks now save `curveTab` in the
+existing per-user `.velcal-appearance.json`, preserving accent and other fields.
+Standalone and plugin editors restore the last selected per-key/global tab on
+opening; existing open editors do not switch tabs during accent polling.
+Missing/invalid tab values default to per-key. Profile data, dirty state and DAW
+serialization are unchanged. Added offline regressions for both tab directions,
+accent preservation, standalone/plugin recall and invalid values. Source-only:
+no agent build, test run or push authorized for this change.
+
+Studio One follow-up (2026-10-06): the user rebuilt with `build-installers.bat`,
+reinstalled, launched normally without disabling update checks, and can no longer
+reproduce the lingering background process. This is positive Windows host
+shutdown evidence for the combined lifecycle fixes, not isolation of one root
+cause or Linux/macOS validation. No build/test logs were supplied to the agent.
+Publication remains held pending fresh requested platform verification.
+
+Release hold: Studio One shutdown regression (2026-10-06). The user reports
+that installed 0.0.3 leaves Studio One running indefinitely after closing,
+whereas 0.0.2 exits after a few seconds. The update check has already completed
+when this happens, so a slow GitHub response is not a sufficient explanation.
+Root cause is not confirmed. Local, unbuilt changes move the update worker from
+an owning function-static singleton to shared live plugin/standalone ownership,
+cancel its request and join before the final owner is destroyed, close response
+handles on the worker, and retain only weak ownership/results in static storage.
+Plugin state keeps the worker alive across editor close/reopen; headless plugin
+instances do not start it. The embedded icon no longer keeps a DLL-static native
+graphics image; its cropped app/window images use owner-scoped software storage.
+Offline regressions cover completed/blocked requests, editor reopening, final
+instance destruction and icon storage. Tests have been added but not run;
+no build, push or release is authorized for this investigation. An A/B test using
+`VELCAL_DISABLE_UPDATE_CHECK=1` in Studio One's launch environment is pending.
+Hold publication even if the pending macOS run passes. After diagnosis, request
+fresh build authorization and verify real Studio One exit/relaunch; older passing
+installers cannot validate these changed production inputs.
+
 Release 0.0.3 preparation (2026-10-06): the user authorized pushing all reviewed
 development changes, dispatching all three native installer jobs, and publishing
 only after every requested job passes. Application version is now 0.0.3;
@@ -873,7 +915,8 @@ Treat failures found here as higher priority than new features.
 - `app/MidiEngine.*`: device lifecycle, capture buffering, routing worker/safety
 - `app/MainComponent.*`: desktop workflow, painting, curve editor, controls
 - `app/Theme.hpp`: shared JUCE control styling and action icons
-- `app/AppIcon.hpp`: embedded icon loading, transparent-margin crop and native sizing
+- `app/AppIcon.hpp`: owner-scoped software icon loading, crop and window sizing
+- `app/UpdateCheck.*`: shared live-owner worker, cancellation and weak result cache
 - `app/Main.cpp`: JUCE application/window setup
 - `app/PluginProcessor.*`: VST3 processor/editor and DAW lifecycle
 - `app/PluginState.*`: per-instance profiles, map publication, DAW state

@@ -1,7 +1,10 @@
 #include "MainComponent.hpp"
 #include "DataPaths.hpp"
+#include "UpdateCheck.hpp"
+#include "AppIcon.hpp"
 
 #include <chrono>
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
 
@@ -71,6 +74,9 @@ struct MainComponentTestAccess {
     static juce::String displayedProfile(const MainComponent& component) { return component.profileBox.getText(); }
     static void selectCurveTab(MainComponent& component, bool global)
     { component.setActiveTab(global); }
+    static void clickCurveTab(MainComponent& component, bool global)
+    { component.buttonClicked(global ? &component.globalTabButton : &component.perKeyTabButton); }
+    static bool globalTab(const MainComponent& component) { return component.showingGlobalCurve; }
     static void clickSmooth(MainComponent& component)
     {
         component.smoothCurveToggle.setToggleState(
@@ -98,6 +104,11 @@ struct MainComponentTestAccess {
     static void addManualCurve(MainComponent& component)
     { component.profile->noteCurveOverrides[72].points = {{1, 1}, {64, 80}, {127, 127}}; }
     static void resetKey(MainComponent& component) { component.buttonClicked(&component.resetKeyButton); }
+};
+
+struct PluginStateTestAccess {
+    static void updateChecker(PluginState& state, std::shared_ptr<UpdateCheck> check)
+    { state.updates = std::move(check); }
 };
 
 namespace {
@@ -347,6 +358,89 @@ void recoveredOutputsCanRestartWithoutStaleMessages()
         "a stale note from the old session never reaches the replacement output");
 }
 
+struct FakeUpdateState {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool entered{};
+    bool cancelled{};
+    bool finished{};
+};
+
+class FakeUpdateRequest final : public UpdateCheck::Request {
+public:
+    FakeUpdateRequest(std::shared_ptr<FakeUpdateState> next, bool block)
+        : state(std::move(next)), blocked(block) {}
+    UpdateStatus perform() override
+    {
+        std::unique_lock lock(state->mutex);
+        state->entered = true;
+        state->changed.notify_all();
+        if (blocked)
+            state->changed.wait(lock, [this] { return state->cancelled; });
+        state->finished = true;
+        return {"Test update completed", "Offline fake request", false};
+    }
+    void cancel() override
+    {
+        const std::lock_guard<std::mutex> lock(state->mutex);
+        state->cancelled = true;
+        state->changed.notify_all();
+    }
+private:
+    std::shared_ptr<FakeUpdateState> state;
+    bool blocked;
+};
+
+void updateWorkerStopsBeforeOwnerDestruction()
+{
+    for (const auto blocked : {false, true}) {
+        const auto state = std::make_shared<FakeUpdateState>();
+        auto checker = std::make_shared<UpdateCheck>(std::make_unique<FakeUpdateRequest>(state, blocked));
+        expect(waitFor([&state] {
+            const std::lock_guard<std::mutex> lock(state->mutex);
+            return state->entered;
+        }), "offline update request starts");
+        if (!blocked)
+            expect(waitFor([&checker] { return checker->snapshot().text == "Test update completed"; }),
+                "completed update publishes its result before shutdown");
+        const auto start = std::chrono::steady_clock::now();
+        checker.reset();
+        expect(std::chrono::steady_clock::now() - start < 500ms,
+            "both completed and blocked update workers shut down promptly");
+        const std::lock_guard<std::mutex> lock(state->mutex);
+        expect(state->cancelled && state->finished,
+            "shutdown cancels requests and joins the worker before releasing its owner");
+    }
+
+    const auto request = std::make_shared<FakeUpdateState>();
+    auto plugin = std::make_unique<PluginState>();
+    auto checker = std::make_shared<UpdateCheck>(std::make_unique<FakeUpdateRequest>(request, true));
+    std::weak_ptr<UpdateCheck> weak = checker;
+    PluginStateTestAccess::updateChecker(*plugin, std::move(checker));
+    {
+        MainComponent editor(plugin.get());
+    }
+    expect(!weak.expired(), "closing an editor retains the processor-owned update worker");
+    {
+        MainComponent reopened(plugin.get());
+        expect(plugin->updateChecker() == weak.lock(), "reopening an editor reuses its update worker");
+    }
+    const auto start = std::chrono::steady_clock::now();
+    plugin.reset();
+    expect(weak.expired() && std::chrono::steady_clock::now() - start < 500ms,
+        "last plugin owner releases its cancelled worker before DLL teardown");
+    {
+        const std::lock_guard<std::mutex> lock(request->mutex);
+        expect(request->cancelled && request->finished, "plugin destruction cancels the in-flight request");
+    }
+    {
+        PluginState first;
+        PluginState second;
+        expect(first.updateChecker() == second.updateChecker(),
+            "multiple live plugin instances share one update service");
+    }
+}
+
 void accentPreferencePersistsWithoutChangingProfiles()
 {
     const auto file = velcalProfileDirectory().getChildFile(".velcal-appearance.json");
@@ -372,9 +466,12 @@ void accentPreferencePersistsWithoutChangingProfiles()
         MainComponent component;
         expect(MainComponentTestAccess::accent(component) == velcal_ui::accent,
             "missing appearance preferences default to teal");
+        expect(!MainComponentTestAccess::globalTab(component),
+            "missing tab preference defaults to per-key calibration");
         MainComponentTestAccess::newProfile(component);
         const auto before = velcal::serializeProfile(MainComponentTestAccess::profile(component));
         const auto dirty = MainComponentTestAccess::dirty(component);
+        MainComponentTestAccess::clickCurveTab(component, true);
         for (std::size_t i = 0; i < velcal_ui::accents.size(); ++i) {
             MainComponentTestAccess::accent(component, i);
             expect(MainComponentTestAccess::accent(component) == velcal_ui::accents[i].colour
@@ -393,12 +490,23 @@ void accentPreferencePersistsWithoutChangingProfiles()
         MainComponent reopened;
         PluginState plugin;
         MainComponent editor(&plugin);
+        expect(MainComponentTestAccess::globalTab(reopened) && MainComponentTestAccess::globalTab(editor),
+            "standalone and plugin editors recall the global tab after accent changes");
         expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents.back().colour
                 && MainComponentTestAccess::accent(editor) == velcal_ui::accents.back().colour,
             "standalone and plugin editors recall the saved accent");
         const auto before = plugin.serialize();
+        MainComponentTestAccess::clickCurveTab(editor, false);
         MainComponentTestAccess::accent(editor, 12);
         MainComponentTestAccess::refreshAppearance(reopened);
+        expect(MainComponentTestAccess::globalTab(reopened),
+            "appearance polling does not switch an already-open editor's tab");
+        {
+            MainComponent nextEditor(&plugin);
+            expect(!MainComponentTestAccess::globalTab(nextEditor)
+                    && MainComponentTestAccess::accent(nextEditor) == velcal_ui::accents[12].colour,
+                "per-key selection is remembered without losing the accent preference");
+        }
         expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents[12].colour
                 && plugin.serialize() == before,
             "open editors share appearance without changing DAW state");
@@ -413,6 +521,12 @@ void accentPreferencePersistsWithoutChangingProfiles()
         MainComponentTestAccess::refreshAppearance(editor);
         expect(MainComponentTestAccess::accent(editor) == velcal_ui::accent,
             "unknown saved accents safely fall back to teal");
+        file.replaceWithText("{\"accent\":\"Unknown\",\"curveTab\":42}");
+        {
+            MainComponent fallback(&plugin);
+            expect(!MainComponentTestAccess::globalTab(fallback),
+                "invalid saved tab values safely fall back to per-key");
+        }
     }
 }
 
@@ -605,12 +719,25 @@ int main()
 {
     const juce::ScopedJuceInitialiser_GUI initialiseJuce;
     juce::LookAndFeel::getDefaultLookAndFeel().setUsingNativeAlertWindows(false);
+    const auto icon = velcalAppIcon();
+    const auto secondIcon = velcalAppIcon();
+    const auto windowIcon = velcalWindowIcon();
+    expect(icon.isValid() && secondIcon.isValid() && windowIcon.isValid(),
+        "embedded app and window icons decode successfully");
+    expect(icon.getPixelData() != secondIcon.getPixelData(),
+        "app icons do not retain a shared DLL-static image");
+    for (const auto& image : {icon, secondIcon, windowIcon}) {
+        if (image.isValid())
+            expect(image.getPixelData()->createType()->getTypeID() == juce::SoftwareImageType{}.getTypeID(),
+                "icon storage does not retain native graphics resources");
+    }
     routingPreservesMessagesAndCleansUp();
     floodCutoffAlsoCleansUp();
     blockedDriversDoNotOwnTheEngine();
     outputFailuresAreReported();
     recoveredOutputsCanRestartWithoutStaleMessages();
     captureExitRestoresControls();
+    updateWorkerStopsBeforeOwnerDestruction();
     accentPreferencePersistsWithoutChangingProfiles();
     firstSmoothClickAppliesToNewCurve();
     smoothPreservesAutomaticCalibration();

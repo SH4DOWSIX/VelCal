@@ -1,4 +1,5 @@
 #include "PluginState.hpp"
+#include "UpdateCheck.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -22,6 +23,14 @@ PluginState::PluginState()
     profile.inputDevice.name = "DAW MIDI";
     profile.generated = velcal::calibrate({});
     current.profile = std::move(profile);
+}
+
+std::shared_ptr<UpdateCheck> PluginState::updateChecker()
+{
+    const std::scoped_lock lock(mutex);
+    if (!updates)
+        updates = sharedUpdateCheck();
+    return updates;
 }
 
 PluginState::Snapshot PluginState::snapshot() const

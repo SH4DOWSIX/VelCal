@@ -1,26 +1,16 @@
 #include "MainComponent.hpp"
 #include "DataPaths.hpp"
 #include "AppIcon.hpp"
+#include "UpdateCheck.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <limits>
-#include <mutex>
-#include <sstream>
-#include <thread>
 #include <vector>
 
 #include <nlohmann/json.hpp>
-
-#ifndef VELCAL_VERSION
-#define VELCAL_VERSION "0.0.0"
-#endif
-
-#ifndef VELCAL_ENABLE_UPDATE_CHECK
-#define VELCAL_ENABLE_UPDATE_CHECK 0
-#endif
 
 namespace {
 
@@ -41,9 +31,6 @@ constexpr int profileComboBaseId = 1000;
 constexpr int unsavedProfileComboId = 1;
 constexpr int noSavedProfilesComboId = 2;
 constexpr auto unsavedProfileName = "New calibration (unsaved)";
-constexpr const char* githubLatestReleaseApi =
-    "https://api.github.com/repos/SH4DOWSIX/VelCal/releases/latest";
-constexpr const char* githubReleasesPage = "https://github.com/SH4DOWSIX/VelCal/releases";
 
 void paintSurface(juce::Graphics& graphics, juce::Rectangle<float> bounds)
 {
@@ -278,124 +265,6 @@ juce::String regionName(const std::size_t region)
     return "firm";
 }
 
-std::vector<int> versionParts(juce::String version)
-{
-    version = version.trim();
-    if (version.startsWithIgnoreCase("v"))
-        version = version.substring(1);
-
-    std::vector<int> parts;
-    std::stringstream stream(version.toStdString());
-    std::string segment;
-    while (std::getline(stream, segment, '.')) {
-        const auto suffix = segment.find_first_not_of("0123456789");
-        if (suffix != std::string::npos)
-            segment = segment.substr(0, suffix);
-        parts.push_back(segment.empty() ? 0 : std::stoi(segment));
-    }
-    return parts;
-}
-
-int compareVersions(const juce::String& left, const juce::String& right)
-{
-    auto leftParts = versionParts(left);
-    auto rightParts = versionParts(right);
-    const auto count = std::max(leftParts.size(), rightParts.size());
-    leftParts.resize(count);
-    rightParts.resize(count);
-    for (std::size_t index = 0; index < count; ++index) {
-        if (leftParts[index] < rightParts[index])
-            return -1;
-        if (leftParts[index] > rightParts[index])
-            return 1;
-    }
-    return 0;
-}
-
-struct UpdateStatus {
-    juce::String text{"Checking for updates"};
-    juce::String tooltip{"Checks the latest VelCal release on GitHub"};
-    bool available{};
-};
-
-class UpdateCheck final {
-public:
-    UpdateCheck()
-    {
-#if VELCAL_ENABLE_UPDATE_CHECK
-        if (juce::SystemStats::getEnvironmentVariable("VELCAL_DISABLE_UPDATE_CHECK", {}) == "1") {
-            status = {"Update check off", "GitHub update checks are disabled", false};
-            return;
-        }
-        worker = std::thread([this] { check(); });
-#else
-        status = {"Update check off", "GitHub update checks are enabled in installed builds", false};
-#endif
-    }
-
-    ~UpdateCheck()
-    {
-        if (worker.joinable())
-            worker.join();
-    }
-
-    UpdateStatus snapshot()
-    {
-        const std::lock_guard<std::mutex> lock(mutex);
-        return status;
-    }
-
-private:
-    void check()
-    {
-        UpdateStatus result{"Update check unavailable", "Could not reach GitHub releases", false};
-        try {
-            const juce::URL url(githubLatestReleaseApi);
-            const auto headers = juce::String("User-Agent: VelCal/")
-                + juce::String(VELCAL_VERSION)
-                + "\r\nAccept: application/vnd.github+json\r\n";
-            int httpStatus = 0;
-            auto stream = url.createInputStream(
-                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-                    .withConnectionTimeoutMs(5000)
-                    .withNumRedirectsToFollow(3)
-                    .withStatusCode(&httpStatus)
-                    .withExtraHeaders(headers));
-
-            if (stream != nullptr && httpStatus == 200) {
-                const auto response = stream->readEntireStreamAsString();
-                const auto release = nlohmann::json::parse(response.toStdString());
-                const auto tag = juce::String(release.value("tag_name", std::string{}));
-                if (tag.isNotEmpty()) {
-                    result.available = compareVersions(tag, VELCAL_VERSION) > 0;
-                    result.text = result.available
-                        ? "Update available: " + tag
-                        : "VelCal is up to date";
-                    result.tooltip = result.available
-                        ? "VelCal " + tag + " is available at " + githubReleasesPage
-                        : "Installed version " + juce::String(VELCAL_VERSION);
-                }
-            }
-        } catch (...) {
-            result = {"Update check unavailable", "Could not read GitHub releases", false};
-        }
-
-        const std::lock_guard<std::mutex> lock(mutex);
-        status = std::move(result);
-    }
-
-    std::mutex mutex;
-    UpdateStatus status;
-    std::thread worker;
-};
-
-UpdateCheck& sharedUpdateCheck()
-{
-    // The module owns the worker and cached result, independently of editor lifetimes.
-    static UpdateCheck check;
-    return check;
-}
-
 struct CaptureGuidance {
     bool ready{};
     juce::String countsText;
@@ -499,6 +368,7 @@ MainComponent::MainComponent(PluginState* plugin)
       midiEngine(plugin ? plugin->midi : *ownedMidiEngine)
 {
     setOpaque(true);
+    updateCheck = plugin ? plugin->updateChecker() : sharedUpdateCheck();
     setLookAndFeel(&theme);
     brandIcon = velcalAppIcon();
     setWantsKeyboardFocus(true);
@@ -710,7 +580,7 @@ MainComponent::MainComponent(PluginState* plugin)
         updateLabels();
     setActiveTab(false);
     applyAccent(green);
-    loadAppearance();
+    loadAppearance(true);
     updateCaptureControls();
     if (profileDirectoryResult.failed())
         statusLabel.setText("Could not create profile folder: " + profileDirectoryResult.getErrorMessage(),
@@ -752,7 +622,7 @@ MainComponent::~MainComponent()
 
 void MainComponent::refreshUpdateStatus()
 {
-    const auto status = sharedUpdateCheck().snapshot();
+    const auto status = updateCheck->snapshot();
     if (updateStatusLabel.getText() == status.text)
         return;
     updateStatusLabel.setText(status.text, juce::dontSendNotification);
@@ -787,9 +657,10 @@ void MainComponent::applyAccent(juce::uint32 colour)
     repaint();
 }
 
-void MainComponent::loadAppearance()
+void MainComponent::loadAppearance(bool restoreTab)
 {
     auto colour = static_cast<juce::uint32>(velcal_ui::accent);
+    bool globalTab = false;
     const auto file = velcalProfileDirectory().getChildFile(".velcal-appearance.json");
     if (file.existsAsFile()) {
         try {
@@ -798,24 +669,34 @@ void MainComponent::loadAppearance()
             for (const auto& option : velcal_ui::accents)
                 if (name == option.name)
                     colour = option.colour;
+            if (json.contains("curveTab") && json["curveTab"].is_string())
+                globalTab = json["curveTab"] == "global";
         } catch (...) {
             // A damaged preference must not prevent opening an editor.
         }
     }
     if (green != colour)
         applyAccent(colour);
+    if (restoreTab)
+        setActiveTab(globalTab);
 }
 
-void MainComponent::chooseAccent(std::size_t index)
+bool MainComponent::saveAppearancePreference(const char* key, const std::string& value)
 {
-    if (index >= velcal_ui::accents.size())
-        return;
-    const auto& option = velcal_ui::accents[index];
     const auto directory = velcalProfileDirectory();
-    const nlohmann::json json{{"accent", option.name}};
+    const auto file = directory.getChildFile(".velcal-appearance.json");
+    auto json = nlohmann::json::object();
+    if (file.existsAsFile()) {
+        try {
+            auto existing = nlohmann::json::parse(file.loadFileAsString().toStdString());
+            if (existing.is_object())
+                json = std::move(existing);
+        } catch (...) {}
+    }
+    json[key] = value;
     bool saved = false;
     if (directory.createDirectory().wasOk()) {
-        juce::TemporaryFile temporary(directory.getChildFile(".velcal-appearance.json"));
+        juce::TemporaryFile temporary(file);
         {
             juce::FileOutputStream stream(temporary.getFile());
             const auto bytes = json.dump(2);
@@ -827,7 +708,15 @@ void MainComponent::chooseAccent(std::size_t index)
         if (saved)
             saved = temporary.overwriteTargetFileWithTemporary();
     }
-    if (!saved) {
+    return saved;
+}
+
+void MainComponent::chooseAccent(std::size_t index)
+{
+    if (index >= velcal_ui::accents.size())
+        return;
+    const auto& option = velcal_ui::accents[index];
+    if (!saveAppearancePreference("accent", option.name)) {
         statusLabel.setText("Accent colour could not be saved", juce::dontSendNotification);
         return;
     }
@@ -1085,9 +974,9 @@ void MainComponent::buttonClicked(juce::Button* button)
     else if (button == &clearProfileButton)
         clearMeasurements();
     else if (button == &perKeyTabButton)
-        setActiveTab(false);
+        setActiveTab(false, true);
     else if (button == &globalTabButton)
-        setActiveTab(true);
+        setActiveTab(true, true);
     else if (button == &resetKeyButton) {
         if (profile) {
             profile->noteAdjustments[selectedNote] = 0;
@@ -1679,7 +1568,7 @@ void MainComponent::writeProfile(const juce::File& file)
     }
 }
 
-void MainComponent::setActiveTab(const bool globalCurveTab)
+void MainComponent::setActiveTab(const bool globalCurveTab, const bool remember)
 {
     activeCurvePoint.reset();
     showingGlobalCurve = globalCurveTab;
@@ -1708,6 +1597,8 @@ void MainComponent::setActiveTab(const bool globalCurveTab)
     updateLabels();
     resized();
     repaint();
+    if (remember && !saveAppearancePreference("curveTab", globalCurveTab ? "global" : "per-key"))
+        statusLabel.setText("Curve tab preference could not be saved", juce::dontSendNotification);
 }
 
 void MainComponent::refreshCurvePresets()

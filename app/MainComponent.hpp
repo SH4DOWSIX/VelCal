@@ -42,7 +42,8 @@ private:
     void refreshMidiOutputs();
     void loadAppState();
     void saveAppState() const;
-    void loadAppearance();
+    void loadAppearance(bool restoreTab = false);
+    bool saveAppearancePreference(const char* key, const std::string& value);
     void applyAccent(juce::uint32 colour);
     void chooseAccent(std::size_t index);
     void showThemePalette();
@@ -73,7 +74,7 @@ private:
     void clearMeasurementsConfirmed();
     void saveCurrentProfile();
     void writeProfile(const juce::File& file);
-    void setActiveTab(bool globalCurveTab);
+    void setActiveTab(bool globalCurveTab, bool remember = false);
     void refreshCurvePresets();
     void applySelectedCurvePreset();
     void saveCurvePreset();
@@ -106,6 +107,7 @@ private:
     static juce::String midiNoteName(std::uint8_t note);
 
     velcal_ui::Theme theme{this};
+    std::shared_ptr<UpdateCheck> updateCheck;
     juce::Image brandIcon;
     juce::Label titleLabel;
     juce::TextButton perKeyTabButton{"Per-key calibration"};
