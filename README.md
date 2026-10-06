@@ -33,6 +33,18 @@ and build-verification status.
   MIDI messages.
 - Choose from 16 remembered accent colours, shared by standalone and plugins.
 
+## Screenshots
+
+**Per-key calibration**: keyboard coverage, section statistics, and the selected
+key's velocity curve.
+
+![VelCal per-key calibration with keyboard status colours, calibration statistics and an editable velocity curve](docs/images/per-key-calibration.png)
+
+**Global curve**: shape the whole keyboard's response with presets, touch curve,
+and output limits.
+
+![VelCal global velocity curve with preset selection, touch curve and minimum and maximum output controls](docs/images/global-velocity-curve.png)
+
 ## Get Started
 
 1. Run the installer for your operating system and choose standalone and/or

@@ -67,6 +67,14 @@ results. README edits requested during this run are documentation-only and do
 not authorize a new build. When tagging a later documentation commit, verify
 all build/package inputs are identical to this tested source revision.
 
+README refresh (2026-10-06): the user supplied standalone screenshots, retained
+unchanged under `docs/images/per-key-calibration.png` and
+`docs/images/global-velocity-curve.png`, with captions and descriptive alt text
+in the README. Updated guidance covers whole-keyboard/default-on Smooth,
+independent global Smooth, filename-based profile selection, embedded DAW
+recall, persistent accent colours and the non-installing update indicator.
+Documentation/images only; no new build or polling of the active run.
+
 Post-release source fixes (2026-10-05): the user reported the installed profile
 folder was absent until standalone saved, external profile names did not update
 in the DAW, and new profiles inherited a virtual MIDI input name. Opening either
