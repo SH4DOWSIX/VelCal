@@ -60,6 +60,13 @@ schema 4 and algorithm 0.4.0 remain unchanged. Release notes are
 `docs/releases/0.0.3.md`. Build/publication evidence will be recorded here once
 available. No local build is requested; the existing workflow stays manual-only.
 
+Release build dispatched: run `37464355700` builds all three platforms from
+`0349abeb80c37bf995aa8f18d460bf9867cf98a1`. At the user's request, automatic
+polling has stopped; await their completion/failure notice before inspecting
+results. README edits requested during this run are documentation-only and do
+not authorize a new build. When tagging a later documentation commit, verify
+all build/package inputs are identical to this tested source revision.
+
 Post-release source fixes (2026-10-05): the user reported the installed profile
 folder was absent until standalone saved, external profile names did not update
 in the DAW, and new profiles inherited a virtual MIDI input name. Opening either

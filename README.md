@@ -11,11 +11,12 @@ physical action.
 
 **[Download VelCal](https://github.com/SH4DOWSIX/VelCal/releases/latest)**
 
-Version 0.0.3 provides installers for standalone and VST3 on Windows, Linux, and
+Installers include standalone and VST3 on Windows, Linux, and
 macOS, plus an AU MIDI effect for Logic on macOS. Only Windows has real keyboard
 and DAW validation; Linux/macOS are experimental. See
 [installation and DAW routing](docs/INSTALLING.md) and
-[release notes](docs/releases/0.0.3.md), including unsigned-installer warnings.
+[0.0.3 release notes](docs/releases/0.0.3.md), including unsigned-installer warnings
+and build-verification status.
 
 ## What You Can Do
 
@@ -25,9 +26,12 @@ and DAW validation; Linux/macOS are experimental. See
 - Fine-tune a selected key's response with an adjustment slider or editable curve.
 - Change the feel of the whole keyboard with a global curve and presets such as
   Soft touch, Firm touch, Compressed, and Wide dynamics.
+- Switch smoothing on or off for all keys together, with a separate Smooth
+  setting for the global curve.
 - Save profiles and load them again for future playing sessions.
 - Send corrected MIDI to your DAW while preserving pedals, pitch bend, and other
   MIDI messages.
+- Choose from 16 remembered accent colours, shared by standalone and plugins.
 
 ## Get Started
 
@@ -123,17 +127,39 @@ In **Per-key calibration**, select a key on the displayed keyboard to adjust
 it individually. Drag points on its curve, click to add a point, or right-click
 an interior point to remove it. **Reset key** returns it to automatic calibration.
 
+**Smooth** on this tab applies to all keys together, not just the selected key,
+and defaults to on for new profiles. Automatic smoothing softens quantization
+kinks while staying within one velocity step of the calibrated map. Switch it
+off to use the original generated map. Toggling Smooth preserves measurements,
+manual control points and adjustments; **Reset key** preserves the Smooth choice.
+
 In **Global curve**, choose a preset or edit the curve to change the response
-of the whole keyboard after the individual key corrections. **Smooth** switches
-between a smooth curve and straight lines between points. You can save custom
-global presets inside your profile.
+of the whole keyboard after the individual key corrections. Its independent
+**Smooth** setting switches between smooth interpolation and straight lines
+between points. You can save custom global presets inside your profile.
+
+## Profiles And Appearance
 
 Use **Save profile** after calibration or editing. Changes are not saved
 automatically; standalone warns before closing or replacing an edited profile.
+The profile selector displays saved filenames without `.velcal.json`, rather
+than internal profile or MIDI-device names. It also identifies unsaved profiles
+and an empty library.
+
 Installed builds keep profiles/preferences in writable per-user storage and
 preserve them on uninstall. See [profile locations](docs/INSTALLING.md#profiles-and-updates).
 Back up important profiles. Plugin project state includes completed profiles
-and edits, but not unfinished calibration captures.
+and edits, even if the original profile file is later missing, but not unfinished
+calibration captures.
+
+Select the paintbrush beneath **Save profile** to choose an accent colour.
+The choice takes effect immediately, is remembered across restarts, and is shared
+by standalone and plugin editors. It does not alter your calibration profiles.
+
+The bottom-left status in installed builds checks for a newer GitHub release.
+It reports available updates but does not download or install them automatically;
+use the [release downloads](https://github.com/SH4DOWSIX/VelCal/releases/latest)
+to update. Your saved profiles/preferences are retained during an upgrade.
 
 ## Notes And Help
 
