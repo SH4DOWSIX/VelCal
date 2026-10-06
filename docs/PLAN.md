@@ -53,6 +53,21 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+0.0.3 publication authorized (2026-10-06): run `37474725810` succeeded on
+Windows x64 (job `112307051045`), Linux x64 (`112307050997`) and universal macOS
+(`112307050479`), all from `85be388fcb8319ff97135c5006f42c5309631d4f`.
+Build/test/package and platform installer checks passed, including installed AU
+validation on macOS. This supersedes earlier source-only/unbuilt status and the
+release hold below. The user requested publication after reporting completion;
+release preparation uses only this run's installer artifacts, with SHA256 sums,
+and tags the tested source revision. No additional builds are requested.
+Windows-only real hardware/DAW evidence and remaining Linux/macOS risks remain
+explicit in the release notes. Published `0.0.3` as the latest stable release:
+https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.3 . Its four installer assets
+and `SHA256SUMS.txt` are uploaded; GitHub-reported installer digests match local
+SHA256 hashes. The release targets the tested source revision above. Subsequent
+release-verification documentation changes do not alter build/package inputs.
+
 Fresh verification authorized (2026-10-06): the user requested pushing all
 changes since the last push and dispatching all three native installer jobs.
 These builds must include the shutdown lifecycle fixes and remembered-tab
