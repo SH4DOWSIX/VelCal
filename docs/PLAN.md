@@ -55,7 +55,9 @@ See `AGENTS.md` for the authoritative rule.
 
 All-platform build and conditional release authorized (2026-10-07): the user
 requested fresh Windows x64, Linux x64 and universal macOS installer jobs for
-0.0.4. Prepare release notes and dispatch the manual workflow with platform=all.
+0.0.4. Release notes prepared; the manual workflow was dispatched with
+platform=all from revision `ed89215`:
+https://github.com/SH4DOWSIX/VelCal/actions/runs/37600534097
 Do not poll; wait for the user's results before checking the completed run.
 Publish 0.0.4 only after all requested jobs pass and release artifacts are
 verified. No local build requested. Linux/macOS real hardware/DAW validation
