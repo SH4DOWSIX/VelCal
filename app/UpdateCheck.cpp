@@ -91,7 +91,7 @@ public:
         const auto available = compareVersions(tag, VELCAL_VERSION) > 0;
         return {available ? "Update available: " + tag : "VelCal is up to date",
             available ? "VelCal " + tag + " is available at " + releasesPage
-                      : "Installed version " + juce::String(VELCAL_VERSION), available};
+                      : "Installed version " + juce::String(VELCAL_VERSION), available, tag};
     }
 
     void cancel() override

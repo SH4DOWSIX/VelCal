@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VelCal VERSION 0.0.3 LANGUAGES C CXX)
+project(VelCal VERSION 0.0.4 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/velcal-version.txt" CONTENT "${PROJECT_VERSION}\n")
 
 option(VELCAL_BUILD_TESTS "Build the VelCal core tests" ON)
@@ -103,6 +103,7 @@ if(VELCAL_BUILD_APP)
         app/Main.cpp
         app/MainComponent.cpp
         app/MainComponent.hpp
+        app/CurvePresetLibrary.hpp
         app/Theme.hpp
         app/AppIcon.hpp
         app/UpdateCheck.cpp
@@ -184,7 +185,8 @@ function(velcal_add_plugin target format midi_effect)
     juce_generate_juce_header(${target})
     target_sources(${target} PRIVATE app/PluginProcessor.cpp app/PluginProcessor.hpp
         app/PluginState.cpp app/PluginState.hpp app/MainComponent.cpp app/MainComponent.hpp
-        app/Theme.hpp app/AppIcon.hpp app/UpdateCheck.cpp app/UpdateCheck.hpp app/MidiEngine.cpp app/MidiEngine.hpp)
+        app/Theme.hpp app/AppIcon.hpp app/CurvePresetLibrary.hpp
+        app/UpdateCheck.cpp app/UpdateCheck.hpp app/MidiEngine.cpp app/MidiEngine.hpp)
     target_include_directories(${target} PUBLIC app)
     target_compile_features(${target} PUBLIC cxx_std_17)
     target_compile_definitions(${target} PUBLIC

@@ -18,7 +18,7 @@ inline constexpr std::array<AccentOption, 16> accents{{
     {"Blue", 0xff83b0ff}, {"Sky", 0xff6fcfff}, {"Cyan", 0xff62dddd}, {"Silver", 0xffc4d1dc},
 }};
 
-enum class Icon { none, folder, save, trash, file, play, reset, keyboard, brush };
+enum class Icon { none, folder, save, trash, file, play, reset, keyboard, brush, menu };
 
 inline void drawIcon(juce::Graphics& g, Icon icon, juce::Rectangle<float> bounds)
 {
@@ -64,6 +64,11 @@ inline void drawIcon(juce::Graphics& g, Icon icon, juce::Rectangle<float> bounds
             p.lineTo(13, 16); p.closeSubPath();
             p.startNewSubPath(12, 16); p.quadraticTo(12, 22, 3, 22);
             p.quadraticTo(6, 20, 5, 17); p.quadraticTo(6, 12, 9, 13);
+            break;
+        case Icon::menu:
+            for (const auto y : {5.0f, 12.0f, 19.0f}) {
+                p.startNewSubPath(3, y); p.lineTo(21, y);
+            }
             break;
         case Icon::none: return;
     }

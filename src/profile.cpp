@@ -376,6 +376,25 @@ void saveProfile(const CalibrationProfile& profile, const std::filesystem::path&
     writeProfileAtomically(path, serializeProfile(profile));
 }
 
+std::string serializeCurvePresets(const std::vector<VelocityCurveSettings>& presets)
+{
+    Json curves = Json::array();
+    for (const auto& preset : presets)
+        curves.push_back(writeCurve(preset));
+    return Json{{"velcalCurvePresets", 1}, {"presets", std::move(curves)}}.dump(2) + '\n';
+}
+
+std::vector<VelocityCurveSettings> deserializeCurvePresets(const std::string& data)
+{
+    const auto json = Json::parse(data);
+    if (json.at("velcalCurvePresets").get<int>() != 1 || !json.at("presets").is_array())
+        throw std::runtime_error("unsupported curve preset library");
+    std::vector<VelocityCurveSettings> presets;
+    for (const auto& curve : json.at("presets"))
+        presets.push_back(readCurve(curve));
+    return presets;
+}
+
 CalibrationProfile loadProfile(const std::filesystem::path& path)
 {
     std::ifstream input(path);

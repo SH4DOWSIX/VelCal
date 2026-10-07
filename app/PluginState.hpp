@@ -15,6 +15,7 @@ public:
         juce::File profileFile;
         bool dirty{};
         int keyGroup{1};
+        bool showingGlobalCurve{};
         std::uint64_t revision{};
     };
 

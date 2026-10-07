@@ -1,4 +1,5 @@
 #include "MainComponent.hpp"
+#include "CurvePresetLibrary.hpp"
 #include "DataPaths.hpp"
 #include "AppIcon.hpp"
 #include "UpdateCheck.hpp"
@@ -430,7 +431,7 @@ MainComponent::MainComponent(PluginState* plugin)
     newProfileButton.addListener(this);
     newProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(panelRaised));
     newProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
-    addAndMakeVisible(newProfileButton);
+    addChildComponent(newProfileButton);
 
     clearProfileButton.addListener(this);
     clearProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(panelRaised));
@@ -440,22 +441,28 @@ MainComponent::MainComponent(PluginState* plugin)
     openProfileButton.addListener(this);
     openProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff20564f));
     openProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
-    addAndMakeVisible(openProfileButton);
+    addChildComponent(openProfileButton);
 
     saveProfileButton.addListener(this);
     saveProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff148c74));
     saveProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
-    addAndMakeVisible(saveProfileButton);
-    themeButton.setName("Accent colour");
-    themeButton.setTooltip("Accent colour");
-    themeButton.getProperties().set("velcalIcon", static_cast<int>(velcal_ui::Icon::brush));
-    themeButton.onClick = [this] { showThemePalette(); };
-    addAndMakeVisible(themeButton);
+    addChildComponent(saveProfileButton);
+    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton}) {
+        button->addListener(this);
+        addChildComponent(*button);
+    }
+    addAndMakeVisible(renamePresetButton);
+    addAndMakeVisible(deletePresetButton);
+    profileMenuButton.setName("Profile actions");
+    profileMenuButton.setTooltip("Profile actions");
+    profileMenuButton.getProperties().set("velcalIcon", static_cast<int>(velcal_ui::Icon::menu));
+    profileMenuButton.onClick = [this] { showProfileMenu(); };
+    addAndMakeVisible(profileMenuButton);
 
     deleteProfileButton.addListener(this);
     deleteProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(panelRaised));
     deleteProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
-    addAndMakeVisible(deleteProfileButton);
+    addChildComponent(deleteProfileButton);
 
     keyAdjustmentLabel.setText("Selected-key adjustment", juce::dontSendNotification);
     keyAdjustmentLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
@@ -529,9 +536,9 @@ MainComponent::MainComponent(PluginState* plugin)
     statusLabel.setJustificationType(juce::Justification::centredRight);
     addAndMakeVisible(statusLabel);
 
-    updateStatusLabel.setText("Checking for updates", juce::dontSendNotification);
+    updateStatusLabel.setText(juce::String("v") + VELCAL_VERSION, juce::dontSendNotification);
     updateStatusLabel.setFont(juce::FontOptions(12.0f));
-    updateStatusLabel.setJustificationType(juce::Justification::centredLeft);
+    updateStatusLabel.setJustificationType(juce::Justification::centredRight);
     updateStatusLabel.setBorderSize(juce::BorderSize<int>(0));
     updateStatusLabel.setColour(juce::Label::textColourId, juce::Colour(textMuted));
     updateStatusLabel.setTooltip("Checks the latest VelCal release on GitHub");
@@ -544,6 +551,9 @@ MainComponent::MainComponent(PluginState* plugin)
     };
     setIcon(openProfileButton, velcal_ui::Icon::folder);
     setIcon(saveProfileButton, velcal_ui::Icon::save);
+    setIcon(saveAsProfileButton, velcal_ui::Icon::save);
+    setIcon(resetAllButton, velcal_ui::Icon::reset);
+    setIcon(deletePresetButton, velcal_ui::Icon::trash);
     setIcon(deleteProfileButton, velcal_ui::Icon::trash);
     setIcon(captureButton, velcal_ui::Icon::play);
     setIcon(newProfileButton, velcal_ui::Icon::file);
@@ -551,11 +561,19 @@ MainComponent::MainComponent(PluginState* plugin)
     setIcon(resetKeyButton, velcal_ui::Icon::reset);
     setIcon(resetGlobalButton, velcal_ui::Icon::reset);
     setIcon(savePresetButton, velcal_ui::Icon::save);
+    newProfileButton.setTooltip("New profile");
+    openProfileButton.setTooltip("Open profile");
+    saveProfileButton.setTooltip("Save profile");
+    saveAsProfileButton.setTooltip("Save profile as a new file");
+    resetAllButton.setTooltip("Reset all profile settings");
+    renamePresetButton.setTooltip("Rename shared curve preset");
+    deletePresetButton.setTooltip("Delete shared curve preset");
     for (auto* button : {&captureButton, &saveProfileButton})
         button->getProperties().set("velcalPrimary", true);
     refreshUpdateStatus();
 
     const auto profileDirectoryResult = profileDirectory().createDirectory();
+    reloadCurvePresets();
     if (!pluginState) {
         refreshMidiInputs();
         refreshMidiOutputs();
@@ -578,7 +596,7 @@ MainComponent::MainComponent(PluginState* plugin)
     }
     if (!profile)
         updateLabels();
-    setActiveTab(false);
+    setActiveTab(showingGlobalCurve);
     applyAccent(green);
     loadAppearance(true);
     updateCaptureControls();
@@ -590,6 +608,10 @@ MainComponent::MainComponent(PluginState* plugin)
 MainComponent::~MainComponent()
 {
     stopTimer();
+    if (profileMenuPopup != nullptr) {
+        profileMenuPopup->exitModalState(0);
+        profileMenuPopup->setLookAndFeel(nullptr);
+    }
     themePopup.reset();
     themePalette.reset();
     for (auto* box : {&profileBox, &midiInputBox, &midiOutputBox, &keyGroupBox, &globalPresetBox})
@@ -605,6 +627,8 @@ MainComponent::~MainComponent()
     clearProfileButton.removeListener(this);
     openProfileButton.removeListener(this);
     saveProfileButton.removeListener(this);
+    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton})
+        button->removeListener(this);
     deleteProfileButton.removeListener(this);
     profileBox.removeListener(this);
     perKeyTabButton.removeListener(this);
@@ -623,10 +647,16 @@ MainComponent::~MainComponent()
 void MainComponent::refreshUpdateStatus()
 {
     const auto status = updateCheck->snapshot();
-    if (updateStatusLabel.getText() == status.text)
-        return;
-    updateStatusLabel.setText(status.text, juce::dontSendNotification);
-    updateStatusLabel.setTooltip(status.tooltip);
+    const auto installed = juce::String("v") + VELCAL_VERSION;
+    auto display = installed;
+    if (status.available && status.latestVersion.isNotEmpty()) {
+        auto latest = status.latestVersion.trim();
+        if (latest.startsWithIgnoreCase("v"))
+            latest = latest.substring(1);
+        display += " - v" + latest + " is available";
+    }
+    updateStatusLabel.setText(display, juce::dontSendNotification);
+    updateStatusLabel.setTooltip("Installed version " + installed + "\n" + status.text + "\n" + status.tooltip);
     updateStatusLabel.setColour(
         juce::Label::textColourId,
         status.available ? juce::Colour(amber) : juce::Colour(textMuted));
@@ -638,7 +668,7 @@ void MainComponent::applyAccent(juce::uint32 colour)
     theme.setAccent(colour);
     for (const auto& option : velcal_ui::accents)
         if (colour == option.colour)
-            themeButton.setTooltip("Accent colour: " + juce::String(option.name));
+            profileMenuButton.setTooltip("Profile actions | Accent colour: " + juce::String(option.name));
     const auto accent = juce::Colour(colour);
     for (auto* button : {&captureButton, &saveProfileButton})
         button->setColour(juce::TextButton::buttonColourId, accent.darker(0.55f));
@@ -677,7 +707,7 @@ void MainComponent::loadAppearance(bool restoreTab)
     }
     if (green != colour)
         applyAccent(colour);
-    if (restoreTab)
+    if (restoreTab && !pluginState)
         setActiveTab(globalTab);
 }
 
@@ -723,6 +753,57 @@ void MainComponent::chooseAccent(std::size_t index)
     applyAccent(option.colour);
 }
 
+juce::PopupMenu MainComponent::profileMenu() const
+{
+    const auto ready = !fileChooser && !discardPromptOpen;
+    juce::PopupMenu menu;
+    menu.addItem(1, "New profile", ready);
+    menu.addItem(2, "Open profile...", ready);
+    menu.addSeparator();
+    menu.addItem(3, "Save", ready && saveProfileButton.isEnabled());
+    menu.addItem(4, "Save As...", ready && saveAsProfileButton.isEnabled());
+    menu.addSeparator();
+    menu.addItem(5, "Reset All...", ready && resetAllButton.isEnabled());
+    menu.addItem(6, "Delete profile...", ready && deleteProfileButton.isEnabled());
+    menu.addSeparator();
+    menu.addItem(7, "Accent colour...", ready);
+    return menu;
+}
+
+void MainComponent::showProfileMenu()
+{
+    if (pluginState)
+        syncPluginState();
+    auto menu = profileMenu();
+    menu.setLookAndFeel(&theme);
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(profileMenuButton)
+        .withParentComponent(this).withDeletionCheck(*this)
+        .withPreferredPopupDirection(juce::PopupMenu::Options::PopupDirection::downwards)
+        .withStandardItemHeight(36).withMinimumWidth(210), [safeThis](int result) {
+            if (safeThis != nullptr)
+                safeThis->profileMenuPopup = nullptr;
+            if (safeThis == nullptr || result == 0 || safeThis->fileChooser || safeThis->discardPromptOpen)
+                return;
+            if (safeThis->pluginState)
+                safeThis->syncPluginState();
+            juce::Button* command = nullptr;
+            switch (result) {
+                case 1: command = &safeThis->newProfileButton; break;
+                case 2: command = &safeThis->openProfileButton; break;
+                case 3: command = &safeThis->saveProfileButton; break;
+                case 4: command = &safeThis->saveAsProfileButton; break;
+                case 5: command = &safeThis->resetAllButton; break;
+                case 6: command = &safeThis->deleteProfileButton; break;
+                case 7: safeThis->showThemePalette(); return;
+                default: return;
+            }
+            if (command->isEnabled())
+                safeThis->buttonClicked(command);
+        });
+    profileMenuPopup = juce::Component::getCurrentlyModalComponent();
+}
+
 void MainComponent::showThemePalette()
 {
     themePopup.reset();
@@ -734,7 +815,7 @@ void MainComponent::showThemePalette()
             }
             return static_cast<juce::uint32>(velcal_ui::accent);
         });
-    themePopup = std::make_unique<juce::CallOutBox>(*themePalette, themeButton.getBounds(), this);
+    themePopup = std::make_unique<juce::CallOutBox>(*themePalette, profileMenuButton.getBounds(), this);
     themePopup->setDismissalMouseClicksAreAlwaysConsumed(true);
     themePopup->enterModalState(true);
 }
@@ -967,6 +1048,10 @@ void MainComponent::buttonClicked(juce::Button* button)
         chooseProfile();
     else if (button == &saveProfileButton)
         saveCurrentProfile();
+    else if (button == &saveAsProfileButton)
+        saveCurrentProfile(true);
+    else if (button == &resetAllButton)
+        resetAll();
     else if (button == &deleteProfileButton)
         deleteSelectedProfile();
     else if (button == &newProfileButton)
@@ -990,6 +1075,10 @@ void MainComponent::buttonClicked(juce::Button* button)
         }
     } else if (button == &savePresetButton)
         saveCurvePreset();
+    else if (button == &renamePresetButton)
+        renameCurvePreset();
+    else if (button == &deletePresetButton)
+        deleteCurvePreset();
     else if (button == &resetGlobalButton) {
         if (profile) {
             profile->globalCurve = defaultCurvePresets()[0];
@@ -1226,6 +1315,10 @@ void MainComponent::updateCaptureControls()
     keyGroupBox.setEnabled(!capturing);
     midiInputBox.setEnabled(!capturing);
     routingToggle.setEnabled(!capturing);
+    saveProfileButton.setEnabled(profile.has_value() && !capturing);
+    saveAsProfileButton.setEnabled(profile.has_value() && !capturing);
+    clearProfileButton.setEnabled(profile.has_value() && !capturing);
+    resetAllButton.setEnabled(profile.has_value() && !capturing);
 }
 
 void MainComponent::timerCallback()
@@ -1233,6 +1326,7 @@ void MainComponent::timerCallback()
     if (++appearancePollTicks >= 12) {
         appearancePollTicks = 0;
         loadAppearance();
+        reloadCurvePresets();
     }
     refreshUpdateStatus();
     if (pluginState)
@@ -1287,17 +1381,21 @@ void MainComponent::timerCallback()
 
 void MainComponent::chooseProfile()
 {
+    if (fileChooser || discardPromptOpen)
+        return;
     fileChooser = std::make_unique<juce::FileChooser>(
         "Open VelCal profile",
         profileDirectory(),
         "*.velcal.json");
     fileChooser->launchAsync(
         juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& chooser) {
+        [safeThis = juce::Component::SafePointer<MainComponent>(this)](const juce::FileChooser& chooser) {
             const auto file = chooser.getResult();
+            if (safeThis == nullptr)
+                return;
+            safeThis->fileChooser.reset();
             if (file.existsAsFile())
-                loadProfile(file);
-            fileChooser.reset();
+                safeThis->loadProfile(file);
         });
 }
 
@@ -1317,6 +1415,7 @@ void MainComponent::loadProfileConfirmed(const juce::File& file)
         profile = velcal::loadProfile(juceFilePath(file));
         profileFile = file;
         profileDirty = false;
+        ++profileRevision;
         if (midiEngine.isCapturing())
             midiEngine.cancelCapture();
         updateCaptureControls();
@@ -1336,7 +1435,7 @@ void MainComponent::loadProfileConfirmed(const juce::File& file)
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Could not open profile",
-            error.what());
+            error.what(), "OK", this, juce::ModalCallbackFunction::create([](int) {}));
     }
     updateLabels();
     repaint();
@@ -1352,15 +1451,18 @@ void MainComponent::deleteSelectedProfile()
         return;
 
     const juce::Component::SafePointer<MainComponent> safeThis(this);
+    const auto revision = profileRevision;
     juce::AlertWindow::showOkCancelBox(
         juce::MessageBoxIconType::WarningIcon,
         "Delete this profile?",
-        "This will remove \"" + file.getFileName() + "\" from the profile list.",
+        "Delete \"" + file.getFileName() + "\" from disk? Unsaved edits to this profile will also be discarded.",
         "Delete",
         "Cancel",
         this,
-        juce::ModalCallbackFunction::create([safeThis, file](const int result) {
-            if (result != 0 && safeThis != nullptr)
+        juce::ModalCallbackFunction::create([safeThis, file, revision](const int result) {
+            if (safeThis != nullptr && safeThis->pluginState)
+                safeThis->syncPluginState();
+            if (result != 0 && safeThis != nullptr && safeThis->profileRevision == revision)
                 safeThis->deleteProfileConfirmed(file);
         }));
 }
@@ -1375,7 +1477,8 @@ void MainComponent::deleteProfileConfirmed(const juce::File& file)
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Could not delete profile",
-            "VelCal could not remove the selected profile file.");
+            "VelCal could not remove the selected profile file.",
+            "OK", this, juce::ModalCallbackFunction::create([](int) {}));
         return;
     }
 
@@ -1383,7 +1486,10 @@ void MainComponent::deleteProfileConfirmed(const juce::File& file)
         profile.reset();
         profileDirty = false;
         profileFile = juce::File{};
+        ++profileRevision;
         selectedNote = 60;
+        midiEngine.cancelCapture();
+        captureGuide.reset();
         midiEngine.stopRouting();
         updateCaptureControls();
         MidiEngine::MapBank identity;
@@ -1416,41 +1522,72 @@ void MainComponent::requestClose(std::function<void()> close)
 
 void MainComponent::markProfileDirty()
 {
+    ++profileRevision;
     profileDirty = true;
     selectProfileInList(profileFile);
+    const auto index = globalPresetBox.getSelectedId() - 1000;
+    const auto shared = profile && juce::isPositiveAndBelow(index, sharedCurvePresets.size())
+        && velcal::serializeCurvePresets({profile->globalCurve})
+            == velcal::serializeCurvePresets({sharedCurvePresets[static_cast<std::size_t>(index)]});
+    renamePresetButton.setEnabled(shared);
+    deletePresetButton.setEnabled(shared);
     publishPluginState();
 }
 
 void MainComponent::confirmDiscardUnsaved(std::function<void()> action)
 {
-    if (discardPromptOpen)
+    if (discardPromptOpen || fileChooser)
         return;
+    if (pluginState)
+        syncPluginState();
     if (!profileDirty && !midiEngine.isCapturing()) {
         action();
         return;
     }
     discardPromptOpen = true;
     const juce::Component::SafePointer<MainComponent> safeThis(this);
-    juce::AlertWindow::showOkCancelBox(
+    const auto revision = profileRevision;
+    juce::AlertWindow::showYesNoCancelBox(
         juce::MessageBoxIconType::QuestionIcon,
-        "Discard unsaved changes?",
+        "Unsaved profile changes",
         midiEngine.isCapturing()
-            ? "The current capture will be discarded. Cancel to finish the section and save your profile."
-            : "This profile has unsaved changes. Cancel to save your profile before continuing.",
+            ? "Finish the current capture and save before continuing?"
+            : "Save changes to the current profile before continuing?",
+        midiEngine.isCapturing() ? "Finish and Save" : "Save",
         "Discard",
         "Cancel",
         this,
-        juce::ModalCallbackFunction::create([safeThis, action = std::move(action)](const int result) {
+        juce::ModalCallbackFunction::create([safeThis, revision, action = std::move(action)](const int result) {
             if (safeThis == nullptr)
                 return;
+            if (safeThis->pluginState)
+                safeThis->syncPluginState();
+            if (safeThis->profileRevision != revision) {
+                safeThis->discardPromptOpen = false;
+                return;
+            }
+            if (result == 1) {
+                if (safeThis->midiEngine.isCapturing())
+                    safeThis->finishSectionCapture();
+                safeThis->saveCurrentProfile(false, [safeThis, action](bool saved) {
+                    if (safeThis == nullptr)
+                        return;
+                    safeThis->discardPromptOpen = false;
+                    if (saved)
+                        action();
+                });
+                return;
+            }
             safeThis->discardPromptOpen = false;
-            if (result != 0)
+            if (result == 2)
                 action();
         }));
 }
 
 void MainComponent::replaceWithNewProfile()
 {
+    midiEngine.cancelCapture();
+    captureGuide.reset();
     midiEngine.stopRouting();
     updateCaptureControls();
     routingToggle.setToggleState(false, juce::dontSendNotification);
@@ -1469,8 +1606,10 @@ void MainComponent::replaceWithNewProfile()
     newProfile.generated = velcal::calibrate(newProfile.presses, newProfile.settings);
 
     profile = std::move(newProfile);
+    ++profileRevision;
     profileDirty = false;
     profileFile = juce::File{};
+    keyGroupBox.setSelectedId(1, juce::dontSendNotification);
     refreshProfileList();
     saveAppState();
     selectedNote = 60;
@@ -1484,25 +1623,32 @@ void MainComponent::replaceWithNewProfile()
 
 void MainComponent::clearMeasurements()
 {
-    if (!profile || profile->presses.empty())
+    if (!profile || midiEngine.isCapturing())
         return;
 
     const juce::Component::SafePointer<MainComponent> safeThis(this);
+    const auto revision = profileRevision;
     juce::AlertWindow::showOkCancelBox(
         juce::MessageBoxIconType::QuestionIcon,
-        "Clear all measurements?",
-        "Every captured section will be removed and all velocity mappings reset. The saved file is unchanged until you select Save profile.",
-        "Clear data",
+        "Clear calibration?",
+        "Remove all measurements, per-key curves and trims? The global curve is kept. The saved file is unchanged until you save.",
+        "Clear calibration",
         "Cancel",
         this,
-        juce::ModalCallbackFunction::create([safeThis](const int result) {
-            if (result != 0 && safeThis != nullptr)
+        juce::ModalCallbackFunction::create([safeThis, revision](const int result) {
+            if (safeThis != nullptr && safeThis->pluginState)
+                safeThis->syncPluginState();
+            if (result != 0 && safeThis != nullptr && safeThis->profileRevision == revision)
                 safeThis->clearMeasurementsConfirmed();
         }));
 }
 
 void MainComponent::clearMeasurementsConfirmed()
 {
+    if (!profile)
+        return;
+    midiEngine.cancelCapture();
+    captureGuide.reset();
     midiEngine.stopRouting();
     updateCaptureControls();
     routingToggle.setToggleState(false, juce::dontSendNotification);
@@ -1510,66 +1656,156 @@ void MainComponent::clearMeasurementsConfirmed()
     profile->generated = velcal::calibrate(profile->presses, profile->settings);
     profile->noteAdjustments.fill(0);
     profile->noteCurveOverrides.fill({});
-    profile->globalCurve = defaultCurvePresets()[0];
     markProfileDirty();
     selectedNote = 60;
     refreshCurvePresets();
     updateEditingControls();
     updateEffectiveMaps();
     updateLabels();
-    statusLabel.setText("Measurements cleared", juce::dontSendNotification);
+    statusLabel.setText("Calibration cleared", juce::dontSendNotification);
     repaint();
 }
 
-void MainComponent::saveCurrentProfile()
+void MainComponent::resetAll()
+{
+    if (!profile || midiEngine.isCapturing())
+        return;
+    const auto revision = profileRevision;
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::WarningIcon, "Reset all profile settings?",
+        "Remove all calibration, per-key curves and trims, and reset the global curve and profile settings? "
+        "The profile name, file location and saved presets are kept. The file is unchanged until you save.",
+        "Reset All", "Cancel", this,
+        juce::ModalCallbackFunction::create([safeThis, revision](int result) {
+            if (safeThis != nullptr && safeThis->pluginState)
+                safeThis->syncPluginState();
+            if (result != 0 && safeThis != nullptr && safeThis->profileRevision == revision)
+                safeThis->resetAllConfirmed();
+        }));
+}
+
+void MainComponent::resetAllConfirmed()
 {
     if (!profile)
         return;
-    if (profileFile != juce::File{}) {
-        writeProfile(profileFile);
+    midiEngine.cancelCapture();
+    captureGuide.reset();
+    midiEngine.stopRouting();
+    routingToggle.setToggleState(false, juce::dontSendNotification);
+    profile->settings = {};
+    profile->presses.clear();
+    profile->generated = velcal::calibrate({}, profile->settings);
+    profile->noteAdjustments.fill(0);
+    profile->noteCurveOverrides.fill({});
+    profile->globalCurve = defaultCurvePresets()[0];
+    keyGroupBox.setSelectedId(1, juce::dontSendNotification);
+    selectedNote = 60;
+    markProfileDirty();
+    refreshCurvePresets();
+    updateCaptureControls();
+    updateEditingControls();
+    updateEffectiveMaps();
+    updateLabels();
+    statusLabel.setText("Profile reset", juce::dontSendNotification);
+    repaint();
+}
+
+void MainComponent::saveCurrentProfile(bool saveAs, std::function<void(bool)> completed)
+{
+    if (pluginState)
+        syncPluginState();
+    if (!profile || fileChooser || midiEngine.isCapturing()) {
+        if (completed) completed(false);
+        return;
+    }
+    if (!saveAs && profileFile != juce::File{}) {
+        const auto saved = writeProfile(profileFile);
+        if (completed) completed(saved);
         return;
     }
 
-    const auto suggestedName = juce::File::createLegalFileName(profile->profileName)
-        + ".velcal.json";
+    const auto suggestedName = saveAs && profileFile != juce::File{}
+        ? profileFile.getFileName().dropLastCharacters(12) + " copy.velcal.json"
+        : juce::File::createLegalFileName(profile->profileName) + ".velcal.json";
     profileDirectory().createDirectory();
     fileChooser = std::make_unique<juce::FileChooser>(
-        "Save VelCal profile",
-        profileDirectory().getChildFile(suggestedName),
+        saveAs ? "Save VelCal profile as" : "Save VelCal profile",
+        (profileFile == juce::File{} ? profileDirectory() : profileFile.getParentDirectory())
+            .getChildFile(suggestedName),
         "*.velcal.json");
+    const auto revision = profileRevision;
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
     fileChooser->launchAsync(
-        juce::FileBrowserComponent::saveMode
-            | juce::FileBrowserComponent::canSelectFiles
-            | juce::FileBrowserComponent::warnAboutOverwriting,
-        [this](const juce::FileChooser& chooser) {
-            const auto file = chooser.getResult();
-            if (file != juce::File{})
-                writeProfile(file);
-            fileChooser.reset();
+        juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+        [safeThis, revision, saveAs, completed](const juce::FileChooser& chooser) {
+            auto file = chooser.getResult();
+            if (safeThis == nullptr)
+                return;
+            safeThis->fileChooser.reset();
+            if (file != juce::File{} && !file.getFileName().endsWithIgnoreCase(".velcal.json"))
+                file = file.getSiblingFile(file.getFileName() + ".velcal.json");
+            if (saveAs && file == safeThis->profileFile) {
+                safeThis->completeProfileSave(file, revision, completed, true);
+                return;
+            }
+            if (file.existsAsFile()) {
+                juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+                    "Replace existing profile?", "Replace \"" + file.getFileName() + "\"?",
+                    "Replace", "Cancel", safeThis,
+                    juce::ModalCallbackFunction::create([safeThis, file, revision, completed, saveAs](int result) {
+                        if (safeThis != nullptr)
+                            safeThis->completeProfileSave(result != 0 ? file : juce::File{}, revision, completed, saveAs);
+                    }));
+            } else {
+                safeThis->completeProfileSave(file, revision, completed, saveAs);
+            }
         });
 }
 
-void MainComponent::writeProfile(const juce::File& file)
+void MainComponent::completeProfileSave(const juce::File& file, std::uint64_t revision,
+    std::function<void(bool)> completed, bool saveAs)
 {
+    if (pluginState)
+        syncPluginState();
+    bool saved = false;
+    if (saveAs && file != juce::File{} && file == profileFile)
+        statusLabel.setText("Save As needs a different filename", juce::dontSendNotification);
+    else if (revision != profileRevision)
+        statusLabel.setText("Profile changed while saving; save again", juce::dontSendNotification);
+    else if (file != juce::File{})
+        saved = writeProfile(file);
+    if (completed) completed(saved);
+}
+
+bool MainComponent::writeProfile(const juce::File& file)
+{
+    if (!profile)
+        return false;
     try {
         velcal::saveProfile(
             *profile,
             juceFilePath(file));
         profileFile = file;
         profileDirty = false;
+        ++profileRevision;
         refreshProfileList();
         saveAppState();
         statusLabel.setText("Profile saved", juce::dontSendNotification);
+        return true;
     } catch (const std::exception& error) {
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Could not save profile",
-            error.what());
+            error.what(), "OK", this, juce::ModalCallbackFunction::create([](int) {}));
+        return false;
     }
 }
 
 void MainComponent::setActiveTab(const bool globalCurveTab, const bool remember)
 {
+    if (remember && pluginState)
+        syncPluginState();
     activeCurvePoint.reset();
     showingGlobalCurve = globalCurveTab;
     perKeyTabButton.setColour(
@@ -1581,15 +1817,16 @@ void MainComponent::setActiveTab(const bool globalCurveTab, const bool remember)
     perKeyTabButton.getProperties().set("velcalPrimary", !globalCurveTab);
     globalTabButton.getProperties().set("velcalPrimary", globalCurveTab);
 
-    for (auto* component : std::array<juce::Component*, 8>{
-             &keyGroupLabel, &keyGroupBox, &captureButton, &newProfileButton,
+    for (auto* component : std::array<juce::Component*, 7>{
+             &keyGroupLabel, &keyGroupBox, &captureButton,
              &clearProfileButton, &keyAdjustmentLabel, &keyAdjustmentSlider, &resetKeyButton})
         component->setVisible(!globalCurveTab);
     keyboardScrollBar.setVisible(!globalCurveTab);
-    for (auto* component : std::array<juce::Component*, 10>{
+    for (auto* component : std::array<juce::Component*, 12>{
              &presetLabel, &globalPresetBox, &curvatureLabel, &curvatureSlider,
              &minimumVelocityLabel, &minimumVelocitySlider, &maximumVelocityLabel,
-             &maximumVelocitySlider, &savePresetButton, &resetGlobalButton})
+             &maximumVelocitySlider, &savePresetButton, &resetGlobalButton,
+             &renamePresetButton, &deletePresetButton})
         component->setVisible(globalCurveTab);
 
     refreshCurvePresets();
@@ -1597,8 +1834,12 @@ void MainComponent::setActiveTab(const bool globalCurveTab, const bool remember)
     updateLabels();
     resized();
     repaint();
-    if (remember && !saveAppearancePreference("curveTab", globalCurveTab ? "global" : "per-key"))
-        statusLabel.setText("Curve tab preference could not be saved", juce::dontSendNotification);
+    if (remember) {
+        if (pluginState)
+            publishPluginState();
+        else if (!saveAppearancePreference("curveTab", globalCurveTab ? "global" : "per-key"))
+            statusLabel.setText("Curve tab preference could not be saved", juce::dontSendNotification);
+    }
 }
 
 void MainComponent::refreshCurvePresets()
@@ -1609,26 +1850,37 @@ void MainComponent::refreshCurvePresets()
     for (std::size_t index = 0; index < defaults.size(); ++index)
         globalPresetBox.addItem(defaults[index].name, static_cast<int>(index + 1));
     globalPresetBox.addSeparator();
+    for (std::size_t index = 0; index < sharedCurvePresets.size(); ++index)
+        globalPresetBox.addItem(sharedCurvePresets[index].name, static_cast<int>(1000 + index));
+    if (!sharedCurvePresets.empty())
+        globalPresetBox.addSeparator();
     if (profile) {
         for (std::size_t index = 0; index < profile->userGlobalPresets.size(); ++index) {
             globalPresetBox.addItem(
-                profile->userGlobalPresets[index].name,
+                profile->userGlobalPresets[index].name + " (profile)",
                 static_cast<int>(100 + index));
         }
 
         int selectedId = 0;
+        const auto applied = velcal::serializeCurvePresets({profile->globalCurve});
         for (std::size_t index = 0; index < defaults.size(); ++index) {
-            if (profile->globalCurve.name == defaults[index].name)
+            if (applied == velcal::serializeCurvePresets({defaults[index]}))
                 selectedId = static_cast<int>(index + 1);
         }
         for (std::size_t index = 0; index < profile->userGlobalPresets.size(); ++index) {
-            if (profile->globalCurve.name == profile->userGlobalPresets[index].name)
+            if (applied == velcal::serializeCurvePresets({profile->userGlobalPresets[index]}))
                 selectedId = static_cast<int>(100 + index);
         }
+        for (std::size_t index = 0; index < sharedCurvePresets.size(); ++index)
+            if (applied == velcal::serializeCurvePresets({sharedCurvePresets[index]}))
+                selectedId = static_cast<int>(1000 + index);
         globalPresetBox.setSelectedId(selectedId, juce::dontSendNotification);
         if (selectedId == 0)
-            globalPresetBox.setText("Custom", juce::dontSendNotification);
+            globalPresetBox.setText(profile->globalCurve.name, juce::dontSendNotification);
     }
+    const auto shared = profile && globalPresetBox.getSelectedId() >= 1000;
+    renamePresetButton.setEnabled(shared);
+    deletePresetButton.setEnabled(shared);
     updatingControls = false;
 }
 
@@ -1640,6 +1892,11 @@ void MainComponent::applySelectedCurvePreset()
     activeCurvePoint.reset();
     if (selectedId >= 1 && selectedId <= static_cast<int>(defaultCurvePresets().size())) {
         profile->globalCurve = defaultCurvePresets()[static_cast<std::size_t>(selectedId - 1)];
+    } else if (selectedId >= 1000) {
+        const auto index = static_cast<std::size_t>(selectedId - 1000);
+        if (index >= sharedCurvePresets.size())
+            return;
+        profile->globalCurve = sharedCurvePresets[index];
     } else if (selectedId >= 100) {
         const auto index = static_cast<std::size_t>(selectedId - 100);
         if (index < profile->userGlobalPresets.size())
@@ -1661,28 +1918,144 @@ void MainComponent::saveCurvePreset()
         "Save global curve preset",
         "Give this velocity curve a name.",
         juce::MessageBoxIconType::NoIcon);
-    dialog->addTextEditor("name", "My curve", "Preset name");
+    const auto curve = profile->globalCurve;
+    const auto revision = profileRevision;
+    const auto builtin = std::any_of(defaultCurvePresets().begin(), defaultCurvePresets().end(),
+        [&](const auto& preset) { return CurvePresetLibrary::sameName(preset.name, curve.name); });
+    dialog->addTextEditor("name", builtin || curve.name == "Custom" ? "My curve" : juce::String(curve.name), "Preset name");
     dialog->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
     dialog->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
     const juce::Component::SafePointer<MainComponent> safeThis(this);
     dialog->enterModalState(
         true,
-        juce::ModalCallbackFunction::create([safeThis, dialog](const int result) {
+        juce::ModalCallbackFunction::create([safeThis, dialog, curve, revision](const int result) {
             if (result == 0 || safeThis == nullptr)
                 return;
             const auto name = dialog->getTextEditorContents("name").trim();
             if (name.isEmpty())
                 return;
-            auto preset = safeThis->profile->globalCurve;
+            auto preset = curve;
             preset.name = name.toStdString();
-            safeThis->profile->globalCurve = preset;
-            safeThis->profile->userGlobalPresets.push_back(preset);
-            safeThis->markProfileDirty();
-            safeThis->refreshCurvePresets();
-            safeThis->updateEditingControls();
-            safeThis->repaint();
+            try {
+                const auto presets = CurvePresetLibrary::load();
+                const auto exists = std::any_of(presets.begin(), presets.end(), [&](const auto& saved) {
+                    return CurvePresetLibrary::sameName(saved.name, preset.name);
+                });
+                if (!exists) {
+                    safeThis->storeCurvePreset(std::move(preset), false, revision);
+                    return;
+                }
+                juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+                    "Replace curve preset?", "Replace \"" + name + "\" in the shared library?",
+                    "Replace", "Cancel", safeThis,
+                    juce::ModalCallbackFunction::create([safeThis, preset, revision](int answer) {
+                        if (answer != 0 && safeThis != nullptr)
+                            safeThis->storeCurvePreset(preset, true, revision);
+                    }));
+            } catch (const std::exception& error) {
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Could not save curve preset", error.what(), "OK", safeThis,
+                    juce::ModalCallbackFunction::create([](int) {}));
+            }
         }),
         true);
+}
+
+void MainComponent::storeCurvePreset(velcal::VelocityCurveSettings preset, bool replace,
+    std::uint64_t revision)
+{
+    if (pluginState)
+        syncPluginState();
+    if (!profile || revision != profileRevision)
+        return;
+    try {
+        for (const auto& builtin : defaultCurvePresets())
+            if (CurvePresetLibrary::sameName(builtin.name, preset.name))
+                throw std::runtime_error("choose a name different from a built-in preset");
+        CurvePresetLibrary::save(preset, replace);
+        profile->globalCurve = std::move(preset);
+        markProfileDirty();
+        reloadCurvePresets();
+        refreshCurvePresets();
+        updateEditingControls();
+        updateLabels();
+        statusLabel.setText("Curve preset saved", juce::dontSendNotification);
+        repaint();
+    } catch (const std::exception& error) {
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Could not save curve preset", error.what(), "OK", this,
+            juce::ModalCallbackFunction::create([](int) {}));
+    }
+}
+
+void MainComponent::reloadCurvePresets()
+{
+    const auto contents = CurvePresetLibrary::file().loadFileAsString().toStdString();
+    if (contents == curveLibraryContents)
+        return;
+    try {
+        auto presets = CurvePresetLibrary::load();
+        sharedCurvePresets = std::move(presets);
+        curveLibraryContents = contents;
+        refreshCurvePresets();
+    } catch (const std::exception&) {
+        statusLabel.setText("Could not read curve preset library", juce::dontSendNotification);
+    }
+}
+
+void MainComponent::renameCurvePreset()
+{
+    const auto index = globalPresetBox.getSelectedId() - 1000;
+    if (!juce::isPositiveAndBelow(index, sharedCurvePresets.size()))
+        return;
+    const auto previous = sharedCurvePresets[static_cast<std::size_t>(index)].name;
+    auto* dialog = new juce::AlertWindow("Rename curve preset", {}, juce::MessageBoxIconType::NoIcon);
+    dialog->addTextEditor("name", previous, "Preset name");
+    dialog->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    dialog->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    dialog->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, dialog, previous](int result) {
+        if (result == 0 || safeThis == nullptr)
+            return;
+        try {
+            const auto name = dialog->getTextEditorContents("name").trim().toStdString();
+            for (const auto& builtin : defaultCurvePresets())
+                if (CurvePresetLibrary::sameName(builtin.name, name))
+                    throw std::runtime_error("choose a name different from a built-in preset");
+            CurvePresetLibrary::rename(previous, name);
+            safeThis->reloadCurvePresets();
+            safeThis->statusLabel.setText("Curve preset renamed", juce::dontSendNotification);
+        } catch (const std::exception& error) {
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Could not rename curve preset", error.what(), "OK", safeThis,
+                juce::ModalCallbackFunction::create([](int) {}));
+        }
+    }), true);
+}
+
+void MainComponent::deleteCurvePreset()
+{
+    const auto index = globalPresetBox.getSelectedId() - 1000;
+    if (!juce::isPositiveAndBelow(index, sharedCurvePresets.size()))
+        return;
+    const auto name = sharedCurvePresets[static_cast<std::size_t>(index)].name;
+    const juce::Component::SafePointer<MainComponent> safeThis(this);
+    juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+        "Delete curve preset?", "Delete \"" + juce::String(name) + "\" from the shared library?",
+        "Delete", "Cancel", this,
+        juce::ModalCallbackFunction::create([safeThis, name](int result) {
+            if (result == 0 || safeThis == nullptr)
+                return;
+            try {
+                CurvePresetLibrary::remove(name);
+                safeThis->reloadCurvePresets();
+                safeThis->statusLabel.setText("Curve preset deleted", juce::dontSendNotification);
+            } catch (const std::exception& error) {
+                juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                    "Could not delete curve preset", error.what(), "OK", safeThis,
+                    juce::ModalCallbackFunction::create([](int) {}));
+            }
+        }));
 }
 
 void MainComponent::sliderValueChanged(juce::Slider* slider)
@@ -1922,6 +2295,7 @@ void MainComponent::publishPluginState() const
     next.profileFile = profileFile;
     next.dirty = profileDirty;
     next.keyGroup = keyGroupBox.getSelectedId();
+    next.showingGlobalCurve = showingGlobalCurve;
     if (pluginState->publish(std::move(next), pluginRevision))
         ++pluginRevision;
 }
@@ -1939,10 +2313,12 @@ void MainComponent::syncPluginState()
     }
     pluginRevision = state.revision;
     pluginStateLoaded = true;
+    ++profileRevision;
     profile = state.profile;
     profileFile = state.profileFile;
     profileDirty = state.dirty;
     keyGroupBox.setSelectedId(state.keyGroup, juce::dontSendNotification);
+    setActiveTab(state.showingGlobalCurve);
     activeCurvePoint.reset();
     refreshProfileList();
     refreshCurvePresets();
@@ -1956,6 +2332,9 @@ void MainComponent::updateEditingControls()
 {
     updatingControls = true;
     const auto enabled = profile.has_value();
+    saveAsProfileButton.setEnabled(enabled && !midiEngine.isCapturing());
+    resetAllButton.setEnabled(enabled && !midiEngine.isCapturing());
+    clearProfileButton.setEnabled(enabled && !midiEngine.isCapturing());
     keyAdjustmentSlider.setEnabled(enabled);
     resetKeyButton.setEnabled(enabled);
     globalPresetBox.setEnabled(enabled);
@@ -1996,10 +2375,14 @@ void MainComponent::updateLabels()
             juce::dontSendNotification);
         statusLabel.setText("", juce::dontSendNotification);
         saveProfileButton.setEnabled(false);
+        saveAsProfileButton.setEnabled(false);
+        resetAllButton.setEnabled(false);
         deleteProfileButton.setEnabled(false);
         return;
     }
-    saveProfileButton.setEnabled(true);
+    saveProfileButton.setEnabled(!midiEngine.isCapturing());
+    saveAsProfileButton.setEnabled(!midiEngine.isCapturing());
+    resetAllButton.setEnabled(!midiEngine.isCapturing());
     deleteProfileButton.setEnabled(profileFile != juce::File{} && profileFile.existsAsFile());
     selectProfileInList(profileFile);
     if (showingGlobalCurve) {
@@ -2026,25 +2409,25 @@ void MainComponent::resized()
 {
     if (captureGuide)
         captureGuide->setBounds(getLocalBounds());
-    updateStatusLabel.setBounds(
-        getLocalBounds().reduced(28).removeFromBottom(24).removeFromLeft(217));
     auto area = getLocalBounds().reduced(28);
     auto header = area.removeFromTop(52);
     const auto compact = getWidth() < 1100;
     auto brand = header.removeFromLeft(245);
     brand.removeFromLeft(64);
-    titleLabel.setBounds(brand);
-    saveProfileButton.setBounds(header.removeFromRight(compact ? 120 : 146));
-    themeButton.setBounds(saveProfileButton.getRight() - 38, saveProfileButton.getBottom() + 18, 38, 38);
-    if (themePopup)
-        themePopup->updatePosition(themeButton.getBounds(), getLocalBounds());
-    header.removeFromRight(12);
-    deleteProfileButton.setBounds(header.removeFromRight(compact ? 92 : 110));
-    header.removeFromRight(12);
-    openProfileButton.setBounds(header.removeFromRight(compact ? 120 : 146));
-    header.removeFromRight(20);
+    titleLabel.setBounds(brand.removeFromTop(52));
     header.removeFromLeft(28);
-    profileBox.setBounds(header);
+    auto selection = header.withSizeKeepingCentre(header.getWidth(), 38);
+    auto tabs = selection.removeFromRight(compact ? 268 : 344);
+    perKeyTabButton.setBounds(tabs.removeFromLeft(compact ? 156 : 190));
+    tabs.removeFromLeft(4);
+    globalTabButton.setBounds(tabs);
+    updateStatusLabel.setBounds(header.getX(), globalTabButton.getY() - 23, header.getWidth(), 18);
+    selection.removeFromRight(12);
+    profileMenuButton.setBounds(selection.removeFromLeft(38));
+    selection.removeFromLeft(8);
+    profileBox.setBounds(selection);
+    if (themePopup)
+        themePopup->updatePosition(profileMenuButton.getBounds(), getLocalBounds());
 
     area.removeFromTop(18);
     auto sidebar = area.removeFromLeft(245).withTrimmedRight(28);
@@ -2065,12 +2448,9 @@ void MainComponent::resized()
     sidebar.removeFromTop(14);
     captureButton.setBounds(sidebar.removeFromTop(44));
     sidebar.removeFromTop(14);
-    auto profileActions = sidebar.removeFromTop(40);
-    newProfileButton.setBounds(profileActions.removeFromLeft(104));
-    profileActions.removeFromLeft(8);
-    clearProfileButton.setBounds(profileActions);
+    clearProfileButton.setBounds(sidebar.removeFromTop(40));
     sidebar.removeFromTop(32);
-    const auto metricsHeight = std::min(212, updateStatusLabel.getY() - 12 - sidebar.getY());
+    const auto metricsHeight = std::min(212, getHeight() - 28 - sidebar.getY());
     metricsBounds = juce::Rectangle<float>(28.0f, static_cast<float>(sidebar.getY()),
         217.0f, static_cast<float>(std::max(0, metricsHeight)));
 
@@ -2090,13 +2470,13 @@ void MainComponent::resized()
     savePresetButton.setBounds(globalActions.removeFromLeft(104));
     globalActions.removeFromLeft(8);
     resetGlobalButton.setBounds(globalActions);
+    globalSidebar.removeFromTop(8);
+    auto presetActions = globalSidebar.removeFromTop(34);
+    renamePresetButton.setBounds(presetActions.removeFromLeft(104));
+    presetActions.removeFromLeft(8);
+    deletePresetButton.setBounds(presetActions);
 
     area.removeFromLeft(28);
-    auto tabs = area.removeFromTop(42);
-    perKeyTabButton.setBounds(tabs.removeFromLeft(190));
-    tabs.removeFromLeft(4);
-    globalTabButton.setBounds(tabs.removeFromLeft(150));
-    area.removeFromTop(14);
     auto selectedHeader = area.removeFromTop(44);
     selectedNoteLabel.setBounds(selectedHeader.removeFromLeft(compact ? 200 : 300));
     smoothCurveToggle.setBounds(selectedHeader.removeFromLeft(112));
@@ -2158,7 +2538,7 @@ void MainComponent::paint(juce::Graphics& graphics)
     if (!adjustmentBounds.isEmpty())
         paintSurface(graphics, adjustmentBounds);
     graphics.setColour(juce::Colour(velcal_ui::border).withAlpha(0.55f));
-    graphics.drawHorizontalLine(150, 301.0f, static_cast<float>(getWidth() - 28));
+    graphics.drawHorizontalLine(94, 301.0f, static_cast<float>(getWidth() - 28));
 
     if (!profile) {
         graphics.setColour(juce::Colour(textMuted));

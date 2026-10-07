@@ -1,6 +1,6 @@
 # VelCal Project Handoff and Plan
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 This is the durable starting point for a new VelCal development conversation.
 Read `AGENTS.md` first for workspace rules, then this file before proposing or
@@ -52,6 +52,135 @@ build outputs to `C:`. The drive is nearly full.
 See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
+
+Source push authorized (2026-10-07): the user requested pushing this session's
+DAW tab recall, profile/reset/save flow, shared preset library, compact header,
+version indicator and version 0.0.4 changes. The proposed played-note-follow
+feature was declined and is not implemented. Latest retained local Windows
+CTest evidence is 3/3 passing (core 0.11s, app 8.03s, plugin 3.34s) from the
+temporary 0.0.2 build, with user-reported working update display. Subsequent
+0.0.4/hyphen edits are source/whitespace checked, not rebuilt. Remote main was
+fetched and verified aligned before committing; its only installer workflow
+is manual-only. Push includes reviewed source/tests/docs only, excluding build
+outputs, dependencies, preferences, calibration profiles and captures. No local
+or GitHub build, release tag or publication requested with this source push.
+
+Version-display validation (2026-10-07): the user reports the temporary 0.0.2
+build and update-available display work. At their request, PROJECT_VERSION is
+now 0.0.4, superseding the temporary test version below. The installed/update
+label uses an ASCII hyphen separator (`v0.0.4 - v0.0.5 is available`) rather
+than a middle dot; the offline formatting assertion matches. This is a local
+source change, not a published release. Whitespace checked; no new agent build,
+test execution or GitHub update.
+
+Temporary update-display version (2026-10-07): at the user's request, the CMake
+project/build version is set to 0.0.2 so the installed checker can detect the
+published 0.0.3 release as an update. Compiled labels, comparison and package
+version follow PROJECT_VERSION. This is a local test version, not a release;
+restore the intended release version before publication. No build or push run.
+
+Version-label build follow-up (2026-10-07): the user's local build reached app
+test compilation and failed with C2662 because the new tooltip test helper took
+a const component while JUCE's `getTooltip()` is non-const. Corrected that helper
+to accept a mutable component; all callers already supply one. Test-only fix,
+source/API/whitespace checked; no agent rebuild or test execution performed.
+
+Header version indicator (2026-10-07, source-only): moved the existing update
+label from bottom-left to the space above Global curve, right-aligned to the
+header edge, without moving/resizing navigation controls. It shows the compiled
+installed version (`v0.0.3`), adding `v0.0.4 is available` after a middle dot when
+a newer release is found. Checking, disabled and failed checks keep the installed
+version visible; full check details stay in the tooltip. UpdateStatus now carries
+the release tag separately from its descriptive text, preserving worker/cache
+ownership and existing network behavior. Sidebar metrics use window bounds
+instead of the relocated label for height calculations. Added offline status
+formatting/tooltip and minimum/default/wide header-placement regressions.
+Documentation updated. Source/API/whitespace checks only; no build or test run.
+
+Single-row navigation (2026-10-07, source-only): per-key/global tabs now sit
+immediately right of the profile selector, aligned with the menu and selector
+at 38px height. Compact tab widths below 1100px leave at least 200px for the
+selector at the supported 860px minimum. Removed the former 42px tab row and
+14px gap; the working view starts 56px higher and its divider follows it.
+Existing minimum/default/wide standalone/plugin layout coverage now checks
+tab ordering, equal heights/alignment, selector width and non-overlap on both
+views. Source/whitespace checks only; no build or runtime visual validation.
+
+Profile menu revision (2026-10-07, source-only): the user reports the corrected
+local installer build succeeded. Their UI feedback supersedes the visible-button
+request below: New/Open/Save/Save As/Reset All/Delete now live in an editor-contained
+menu opened by an icon button immediately left of the profile selector, on both
+tabs. Accent colour is in the same menu and opens the existing swatch palette.
+The extra action row and separate paintbrush button are removed, restoring the
+52px header and earlier sidebar/tab positions. Menu enabled states and action
+dispatch use the existing commands, including all save/reset confirmations;
+callbacks check editor lifetime and current host state before dispatch. Closing
+the editor exits its menu and detaches its owned theme. Existing layout coverage
+now checks the compact header and menu entries/enabled states. Documentation
+updated. Source/API/whitespace checks only; no new build, test execution, visual
+validation or GitHub update. The user's successful build predates these UI edits.
+
+Local build follow-up (2026-10-07): the user's Windows installer build compiled
+the profile/preset changes. Core tests passed (0.14s) and plugin tests passed
+(3.31s); app tests failed (17.95s) with `profile-flow dialog appears`, so packaging
+stopped. The profile-flow failed-save case invokes a callback-less error dialog.
+Pinned JUCE's `showUnmanaged` runs such dialogs synchronously when modal loops
+are enabled, as they are in app tests, even through `showMessageBoxAsync`.
+Profile/preset errors now supply explicit no-op callbacks to force asynchronous
+delivery. The regression helper searches all active modal components by title,
+reports the expected title on failure, waits for dialog destruction, and uses
+the one-button OK result (0). Failed-save dirty-state/continuation assertions
+remain intact. Source/API/whitespace review only after this correction; no agent
+rebuild or runtime execution. The next user-authorized build must confirm the
+app suite passes before installers can be delivered.
+
+Profile flow and shared presets (2026-10-07, source-only): New/Open/Save/Save As/
+Reset All/Delete are visible in a two-row top-right profile header on both tabs.
+Save As switches to a separately saved copy and rejects the current filename.
+First saves normalize `.velcal.json` and confirm existing-file replacement.
+Unsaved transitions offer Save/Discard/Cancel; cancellation, save failure or
+changed editor/host revision prevents the pending action. An ongoing capture
+offers Finish and Save; direct saves are disabled during capture. New/Delete/
+reset explicitly cancel capture. Clear Calibration stays in the per-key sidebar,
+removing measurements, overrides and trims while preserving the global curve
+and calibration settings. Reset All also restores default global/calibration
+settings and white-key selection, preserving identity/file association and
+legacy presets. Both are confirmed, dirty working edits, not immediate writes.
+
+Named global presets now save immediately into `.velcal-curve-presets.json`
+under the shared writable profile directory, independently of Save Profile.
+Bounded inter-process locking and temporary-file replacement protect library
+read-modify-write; malformed existing files are never silently replaced.
+Duplicate names are case-insensitive with explicit replacement confirmation;
+built-in names are reserved. Rename/Delete controls manage shared entries.
+Applied curves are independent profile/DAW copies, so library changes cannot
+alter saved songs. Legacy embedded presets remain available with `(profile)`
+labels and can be copied via Save Preset; no automatic migration or profile
+schema change. Other open editors refresh the library during appearance polling.
+Core/app regression coverage added for library validation/round trips, immediate
+save/recall, duplicates, copy independence, Save As original preservation,
+cancelled/stale save callbacks, failed Save stopping New, Save-and-New, resets,
+DAW publication and toolbar bounds on both tabs at minimum/default/wide sizes.
+Source/API/whitespace checks only: no build, test execution, visual/host validation
+or GitHub update. Next explicitly authorized installer build must run all suites
+and validate native Save As/overwrite/cancel dialogs and both UI layouts.
+
+Host-owned tab recall (2026-10-07, source-only): plugin tab clicks now publish
+the selected per-key/global view in each instance's embedded DAW state and
+notify the host of a non-parameter state change. Project/preset/default-state
+recall restores that view before editor creation or into an already-open editor;
+editor close/reopen retains the instance view. Plugins no longer read or write
+the standalone tab preference in `.velcal-appearance.json`. Standalone still
+remembers its last tab there; accent remains shared across standalone/plugins.
+Older state without a tab, and invalid tab values, default to per-key. The new
+optional field retains plugin state version 1 and profile schema 4. Existing
+embedded profile state already recalls calibration, trims, custom per-key/global
+curves, Smooth, global settings and user presets independently of profile files.
+Added regressions for both tabs, live/headless host recall, instance isolation,
+editor reopening, host notification, legacy/invalid fields, full profile settings
+and standalone preference independence. Source/whitespace review only; no build,
+runtime tests, push or host validation performed. Validate in the next explicitly
+authorized build and exercise Studio One saved default/preset recall.
 
 0.0.3 publication authorized (2026-10-06): run `37474725810` succeeded on
 Windows x64 (job `112307051045`), Linux x64 (`112307050997`) and universal macOS
@@ -826,10 +955,9 @@ user's explicit permission.
 - There is no section manager for reviewing, deleting, or recapturing one bad
   section after it has been added.
 - There is no undo/redo for curve editing.
-- Unsaved edits are marked and confirmed before closing or replacing a profile;
-  there is still no Save As or save-and-continue option in that confirmation.
+- New profile toolbar, Save As, Save-and-continue, reset operations and shared
+  preset library require build/runtime and real-host validation (source-only).
 - Window state is not persisted.
-- User-created global presets are profile-local, not yet shared across profiles.
 - Quick/Recommended/Thorough capture modes are not implemented.
 - There is no one-click calibration bypass/A-B validation view.
 - The curve editor has no keyboard-accessible point editing yet.
@@ -887,10 +1015,9 @@ Treat failures found here as higher priority than new features.
 ### P2: Editing and Profile UX
 
 1. Add undo/redo for curve points, smoothing, trims, and preset application.
-2. Add Save As and a save-and-continue option to the unsaved-change confirmation.
-3. Decide whether user presets should be global app data or profile-local. Any
-   global preset store must remain under the project/user-selected `D:` location
-   for this workspace.
+2. Validate Save As, Save-and-continue and reset dialogs in the next authorized build.
+3. Validate the shared curve-preset library across standalone, VST3/AU and legacy
+   profiles. The development store stays in the project/user-selected `D:` location.
 4. Add precise keyboard controls/accessibility for selected control points.
 5. Review whether per-key trim remains useful now that full per-key curves are
    editable, or whether it should become a simpler advanced control.

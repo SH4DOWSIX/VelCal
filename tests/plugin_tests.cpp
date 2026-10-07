@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 struct MainComponentTestAccess {
     static void trim(MainComponent& component, int value)
@@ -19,6 +20,9 @@ struct MainComponentTestAccess {
             && !component.routingToggle.isVisible();
     }
     static void sync(MainComponent& component) { component.syncPluginState(); }
+    static void clickCurveTab(MainComponent& component, bool global)
+    { component.buttonClicked(global ? &component.globalTabButton : &component.perKeyTabButton); }
+    static bool globalTab(const MainComponent& component) { return component.showingGlobalCurve; }
     static int adjustment(const MainComponent& component) { return component.profile->noteAdjustments[60]; }
     static void begin(MainComponent& component) { component.beginSectionCapture(); }
     static void finish(MainComponent& component) { component.finishSectionCapture(); }
@@ -111,6 +115,76 @@ void processingAndRecall()
         restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
         MainComponentTestAccess::sync(editor);
         expect(MainComponentTestAccess::adjustment(editor) == 12, "open editor follows host recall");
+    }
+}
+
+void tabsAndSettingsFollowHostState()
+{
+    VelCalPluginProcessor processor;
+    auto settings = processor.state.snapshot();
+    settings.profile->noteAdjustments[60] = 7;
+    settings.profile->noteCurveOverrides[60].points = {{1, 1}, {64, 80}, {127, 127}};
+    for (auto& curve : settings.profile->noteCurveOverrides)
+        curve.smooth = false;
+    settings.profile->globalCurve.curvature = 0.4;
+    settings.profile->globalCurve.minimumOutput = 9;
+    settings.profile->globalCurve.maximumOutput = 115;
+    settings.profile->globalCurve.points = {{1, 9}, {64, 72}, {127, 115}};
+    settings.profile->globalCurve.smooth = false;
+    settings.profile->userGlobalPresets.push_back(settings.profile->globalCurve);
+    settings.keyGroup = 2;
+    settings.dirty = true;
+    expect(processor.state.publish(settings, settings.revision), "host-recall settings publish");
+    const auto profile = velcal::serializeProfile(*processor.state.snapshot().profile);
+    MainComponent editor(&processor.state);
+    for (const bool global : {true, false}) {
+        int notifications{};
+        processor.state.onChange = [&] { ++notifications; };
+        MainComponentTestAccess::clickCurveTab(editor, global);
+        processor.state.onChange = nullptr;
+        expect(notifications == 1, "tab click notifies the host of changed plugin state");
+        expect(velcal::serializeProfile(*processor.state.snapshot().profile) == profile
+                && processor.state.snapshot().dirty,
+            "tab clicks preserve profile settings and dirty state");
+        juce::MemoryBlock saved;
+        processor.getStateInformation(saved);
+        MainComponentTestAccess::clickCurveTab(editor, !global);
+        processor.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        MainComponentTestAccess::sync(editor);
+        expect(MainComponentTestAccess::globalTab(editor) == global,
+            "saved host preset overrides a later tab change in an open editor");
+        VelCalPluginProcessor restored;
+        restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+        expect(restored.state.snapshot().showingGlobalCurve == global
+                && restored.state.snapshot().keyGroup == 2
+                && restored.state.snapshot().dirty
+                && velcal::serializeProfile(*restored.state.snapshot().profile) == profile,
+            "host recall restores tab, key group, trims, curves, Smooth and user presets without an editor");
+        {
+            MainComponent reopened(&restored.state);
+            expect(MainComponentTestAccess::globalTab(reopened) == global,
+                "new editor displays the tab restored before it opened");
+        }
+        {
+            MainComponent reopened(&restored.state);
+            expect(MainComponentTestAccess::globalTab(reopened) == global,
+                "closing and reopening an editor preserves the instance tab");
+        }
+        VelCalPluginProcessor independent;
+        expect(!independent.state.snapshot().showingGlobalCurve,
+            "fresh plugin instances start on per-key independently");
+    }
+    auto legacy = nlohmann::json::parse(processor.state.serialize());
+    legacy.erase("curveTab");
+    expect(processor.state.restore(legacy.dump()), "older host state without a tab remains supported");
+    MainComponentTestAccess::sync(editor);
+    expect(!MainComponentTestAccess::globalTab(editor), "older host state defaults to per-key");
+    for (const auto& invalid : {nlohmann::json(42), nlohmann::json("unknown"), nlohmann::json(nullptr)}) {
+        MainComponentTestAccess::clickCurveTab(editor, true);
+        legacy["curveTab"] = invalid;
+        expect(processor.state.restore(legacy.dump()), "invalid tab does not prevent restoring profile state");
+        MainComponentTestAccess::sync(editor);
+        expect(!MainComponentTestAccess::globalTab(editor), "invalid host tab defaults to per-key");
     }
 }
 
@@ -339,6 +413,7 @@ int main()
             "installed data override uses the isolated profile directory");
     firstRunAndExternalProfiles();
     processingAndRecall();
+    tabsAndSettingsFollowHostState();
     calibrationUsesRawNotesAndSampleClock();
     calibrationWorkflowAndOverflow();
     instrumentPresentationAndSilentOutput();

@@ -12,6 +12,7 @@ struct UpdateStatus {
     juce::String text{"Checking for updates"};
     juce::String tooltip{"Checks the latest VelCal release on GitHub"};
     bool available{};
+    juce::String latestVersion{};
 };
 
 class UpdateCheck final {

@@ -47,6 +47,8 @@ private:
     void applyAccent(juce::uint32 colour);
     void chooseAccent(std::size_t index);
     void showThemePalette();
+    juce::PopupMenu profileMenu() const;
+    void showProfileMenu();
     void restoreMidiSelections(
         const juce::String& inputIdentifier,
         const juce::String& inputName,
@@ -72,12 +74,20 @@ private:
     void replaceWithNewProfile();
     void clearMeasurements();
     void clearMeasurementsConfirmed();
-    void saveCurrentProfile();
-    void writeProfile(const juce::File& file);
+    void resetAll();
+    void resetAllConfirmed();
+    void saveCurrentProfile(bool saveAs = false, std::function<void(bool)> completed = {});
+    void completeProfileSave(const juce::File& file, std::uint64_t revision,
+        std::function<void(bool)> completed, bool saveAs = false);
+    bool writeProfile(const juce::File& file);
     void setActiveTab(bool globalCurveTab, bool remember = false);
     void refreshCurvePresets();
     void applySelectedCurvePreset();
     void saveCurvePreset();
+    void renameCurvePreset();
+    void deleteCurvePreset();
+    void storeCurvePreset(velcal::VelocityCurveSettings preset, bool replace, std::uint64_t revision);
+    void reloadCurvePresets();
     void updateEffectiveMaps();
     void publishPluginState() const;
     void syncPluginState();
@@ -120,11 +130,13 @@ private:
     juce::Label keyGroupLabel;
     juce::ComboBox keyGroupBox;
     juce::TextButton captureButton{"Start section"};
-    juce::TextButton newProfileButton{"New profile"};
-    juce::TextButton clearProfileButton{"Clear data"};
-    juce::TextButton openProfileButton{"Open profile"};
-    juce::TextButton saveProfileButton{"Save profile"};
-    juce::TextButton themeButton;
+    juce::TextButton newProfileButton{"New"};
+    juce::TextButton clearProfileButton{"Clear calibration"};
+    juce::TextButton openProfileButton{"Open"};
+    juce::TextButton saveProfileButton{"Save"};
+    juce::TextButton saveAsProfileButton{"Save As"};
+    juce::TextButton resetAllButton{"Reset All"};
+    juce::TextButton profileMenuButton;
     juce::TextButton deleteProfileButton{"Delete"};
     juce::Label keyAdjustmentLabel;
     juce::Slider keyAdjustmentSlider;
@@ -138,6 +150,8 @@ private:
     juce::Label maximumVelocityLabel;
     juce::Slider maximumVelocitySlider;
     juce::TextButton savePresetButton{"Save preset"};
+    juce::TextButton renamePresetButton{"Rename"};
+    juce::TextButton deletePresetButton{"Delete"};
     juce::TextButton resetGlobalButton{"Reset curve"};
     juce::ToggleButton smoothCurveToggle{"Smooth"};
     juce::ScrollBar keyboardScrollBar{false};
@@ -149,6 +163,7 @@ private:
     std::unique_ptr<juce::Component> captureGuide;
     std::unique_ptr<juce::Component> themePalette;
     std::unique_ptr<juce::CallOutBox> themePopup;
+    juce::Component::SafePointer<juce::Component> profileMenuPopup;
     juce::uint32 green{velcal_ui::accent};
     int appearancePollTicks{};
     juce::Array<juce::MidiDeviceInfo> midiInputs;
@@ -168,6 +183,9 @@ private:
     bool updatingProfileList{};
     bool profileDirty{};
     bool discardPromptOpen{};
+    std::uint64_t profileRevision{};
+    std::vector<velcal::VelocityCurveSettings> sharedCurvePresets;
+    std::string curveLibraryContents;
     std::optional<std::size_t> activeCurvePoint;
     juce::Rectangle<float> keyboardBounds;
     juce::Rectangle<float> keyboardKeyBounds;

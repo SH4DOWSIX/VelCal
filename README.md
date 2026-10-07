@@ -52,7 +52,7 @@ and output limits.
    in your DAW following the [routing guide](docs/INSTALLING.md#daw-routing).
 2. Connect your keyboard. In standalone select it under **MIDI input**; in a
    plugin select the input in your DAW instead.
-3. Select **New profile** to start a calibration, or **Open profile** to load one
+3. In the profile menu, select **New profile** to start a calibration, or **Open profile** to load one
    you have already saved.
 
 You do not need to set up a MIDI output just to calibrate. Set up routing when
@@ -85,7 +85,7 @@ the keys themselves.
    repeat for the range you want to calibrate.
 6. Choose **Black keys** and repeat the process for the black keys, overlapping
    each new black-key section with the previous one.
-7. Select **Save profile** when you are finished.
+7. Select **Save** in the profile menu when you are finished.
 
 Keep sections overlapping within each key colour. Without shared keys, VelCal
 cannot reliably compare the response of neighbouring sections. You can calibrate
@@ -148,12 +148,31 @@ manual control points and adjustments; **Reset key** preserves the Smooth choice
 In **Global curve**, choose a preset or edit the curve to change the response
 of the whole keyboard after the individual key corrections. Its independent
 **Smooth** setting switches between smooth interpolation and straight lines
-between points. You can save custom global presets inside your profile.
+between points. **Save preset** immediately saves a named curve to a shared
+library, available across profiles in standalone and plugins. Replacing a name
+requires confirmation; **Rename** and **Delete** manage the selected library
+preset. Applying a preset copies its curve into the profile, so later library
+changes do not alter existing profiles or DAW projects. Older profile-local
+presets remain available with a `(profile)` suffix; apply one and select
+**Save preset** to add it to the shared library.
 
 ## Profiles And Appearance
 
-Use **Save profile** after calibration or editing. Changes are not saved
-automatically; standalone warns before closing or replacing an edited profile.
+The menu button immediately left of the profile selector provides **New profile**,
+**Open profile**, **Save**, **Save As**, **Reset All** and **Delete profile**
+on both tabs. **Save** updates the current file,
+asking for a filename on the first save. **Save As** saves a separate copy and
+switches to it, preserving the original file. Profile changes are not saved
+automatically; closing standalone or replacing an edited profile offers
+**Save / Discard / Cancel**. Cancelling or failing a save keeps the current edits
+and stops the pending action.
+
+**Clear calibration** in the calibration sidebar removes measurements, per-key
+curves and trims while preserving the global curve and calibration settings.
+**Reset All** also restores the global curve and profile settings to defaults,
+keeping the profile name, file association and saved presets. Both require
+confirmation and leave the file unchanged until you save. **Delete** confirms
+before removing the current profile file and discarding its unsaved edits.
 The profile selector displays saved filenames without `.velcal.json`, rather
 than internal profile or MIDI-device names. It also identifies unsaved profiles
 and an empty library.
@@ -164,12 +183,14 @@ Back up important profiles. Plugin project state includes completed profiles
 and edits, even if the original profile file is later missing, but not unfinished
 calibration captures.
 
-Select the paintbrush beneath **Save profile** to choose an accent colour.
+Select **Accent colour** in the profile menu to choose an accent colour.
 The choice takes effect immediately, is remembered across restarts, and is shared
 by standalone and plugin editors. It does not alter your calibration profiles.
 
-The bottom-left status in installed builds checks for a newer GitHub release.
-It reports available updates but does not download or install them automatically;
+The small version label above **Global curve** shows the installed version
+(for example, `v0.0.3`). When a newer release is found, it also shows
+`v0.0.4 is available`. Check details are in its tooltip; checking or an unavailable
+check leaves the installed version visible. It does not download or install updates automatically;
 use the [release downloads](https://github.com/SH4DOWSIX/VelCal/releases/latest)
 to update. Your saved profiles/preferences are retained during an upgrade.
 

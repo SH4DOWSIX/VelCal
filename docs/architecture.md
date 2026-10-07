@@ -85,7 +85,27 @@ JSON, file access, and dialogs run outside the audio callback.
 The processor owns the MIDI engine and published profile for its full lifetime.
 Editors can close and reopen without dropping maps, unsaved edits, or ongoing
 capture. Host state includes the full profile, file association, dirty flag, and
-key group, but excludes unfinished captures and MIDI device preferences.
+key group and selected curve tab, but excludes unfinished captures and MIDI device preferences.
 Revision checks prevent a stale editor publishing over a newly restored project.
 Shared `effectiveMaps` composes automatic/manual per-key maps, trim, and global
 curve for both standalone and plugin. Profile schema remains 4.
+
+## Profile And Preset Storage
+
+Profile Save/Save As use the existing atomic profile writer. A Save-and-continue
+action proceeds only after a successful write; cancellation, failure or a newer
+editor/host revision cancels that continuation. Reset operations modify only
+the working profile until Save. Clear Calibration preserves the global curve;
+Reset All preserves identity and saved presets while resetting settings.
+
+`CurvePresetLibrary.hpp` stores named global curves separately in
+`.velcal-curve-presets.json`, beneath the shared writable profile directory.
+Core preset serialization reuses the profile curve parser and validation, with
+a separate version-1 library envelope; profile schema 4 is unchanged.
+Library edits acquire a bounded inter-process lock, reread the latest file,
+validate names/curves and replace it through a JUCE temporary file. Invalid
+existing data is reported rather than overwritten. Editors poll for library
+changes alongside appearance preferences. Library changes never republish
+profile or host state: applying a preset copies its settings into the profile.
+Legacy profile-local presets remain embedded and can be copied into the library
+through Save Preset. The shared library itself is not embedded in DAW state.

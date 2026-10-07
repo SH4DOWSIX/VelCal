@@ -60,6 +60,7 @@ std::string PluginState::serialize() const
     const auto state = snapshot();
     nlohmann::json json = {{"velcalPluginState", 1}, {"dirty", state.dirty},
         {"keyGroup", state.keyGroup}, {"profilePath", state.profileFile.getFullPathName().toStdString()}};
+    json["curveTab"] = state.showingGlobalCurve ? "global" : "per-key";
     json["profile"] = state.profile
         ? nlohmann::json::parse(velcal::serializeProfile(*state.profile)) : nlohmann::json(nullptr);
     return json.dump();
@@ -76,6 +77,8 @@ bool PluginState::restore(const std::string& data)
             next.profile = velcal::deserializeProfile(json.at("profile").dump());
         next.dirty = json.value("dirty", false);
         next.keyGroup = json.value("keyGroup", 1) == 2 ? 2 : 1;
+        next.showingGlobalCurve = json.contains("curveTab") && json["curveTab"].is_string()
+            && json["curveTab"] == "global";
         const auto path = juce::String(json.value("profilePath", std::string{}));
         if (juce::File::isAbsolutePath(path))
             next.profileFile = juce::File(path);

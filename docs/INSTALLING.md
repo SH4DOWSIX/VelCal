@@ -107,6 +107,16 @@ names, including files outside the folder. New profiles are named
 have explicit selector entries; DAW projects retain embedded profiles even if
 the original file is missing.
 
-The paintbrush below Save profile changes the accent colour. The choice is
+The profile header's colour picker changes the accent colour. The choice is
 remembered separately from calibration and shared by standalone and plugins.
-Installed editors also show GitHub release-update status at the bottom left.
+Published 0.0.3 editors show GitHub release-update status at the bottom left.
+The next source revision moves it above Global curve: the installed version
+always appears with a lowercase `v`, with the newer version added when available.
+
+The next source revision adds `.velcal-curve-presets.json` in this same folder
+for the shared named global-curve library. Back up that file with your profiles
+to retain the library. Applied curves remain embedded in profiles and DAW state
+and do not require the library file to load. Existing profile-local presets are
+retained. These changes require rebuilding; the published 0.0.3 installers do
+not yet include the new profile menu or shared library. In the next source
+revision, **Accent colour** is in the menu immediately left of the selector.

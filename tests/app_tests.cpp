@@ -2,6 +2,7 @@
 #include "DataPaths.hpp"
 #include "UpdateCheck.hpp"
 #include "AppIcon.hpp"
+#include "CurvePresetLibrary.hpp"
 
 #include <chrono>
 #include <condition_variable>
@@ -30,12 +31,12 @@ struct MainComponentTestAccess {
             && component.saveProfileButton.findColour(juce::TextButton::buttonColourId)
                 == juce::Colour(component.green).darker(0.55f);
     }
-    static bool themeButtonFits(MainComponent& component)
+    static bool profileMenuFits(MainComponent& component)
     {
         component.setSize(860, 820);
-        const auto bounds = component.themeButton.getBounds();
+        const auto bounds = component.profileMenuButton.getBounds();
         return component.getLocalBounds().contains(bounds)
-            && bounds.getY() > component.saveProfileButton.getBottom()
+            && !bounds.intersects(component.saveProfileButton.getBounds())
             && !bounds.intersects(component.globalTabButton.getBounds())
             && !bounds.intersects(component.statusLabel.getBounds())
             && !bounds.intersects(component.curveBounds.toNearestInt());
@@ -43,6 +44,10 @@ struct MainComponentTestAccess {
     static void openPalette(MainComponent& component) { component.showThemePalette(); }
     static bool paletteFits(const MainComponent& component)
     { return component.themePopup && component.getLocalBounds().contains(component.themePopup->getBounds()); }
+    static void updateStatus(MainComponent& component, UpdateStatus status)
+    { component.updateCheck = std::make_shared<UpdateCheck>(std::move(status)); component.refreshUpdateStatus(); }
+    static juce::String updateText(const MainComponent& component) { return component.updateStatusLabel.getText(); }
+    static juce::String updateTooltip(MainComponent& component) { return component.updateStatusLabel.getTooltip(); }
     static void startCapture(MainComponent& component)
     {
         MidiEngineTestAccess::capture(component.midiEngine);
@@ -69,7 +74,110 @@ struct MainComponentTestAccess {
     { return component.profileBox.getText().endsWith(" *"); }
     static void load(MainComponent& component, const juce::File& file) { component.loadProfile(file); }
     static void save(MainComponent& component, const juce::File& file) { component.writeProfile(file); }
+    static void completeSave(MainComponent& component, const juce::File& file,
+        std::uint64_t revision, std::function<void(bool)> completed, bool saveAs = false)
+    { component.completeProfileSave(file, revision, std::move(completed), saveAs); }
+    static std::uint64_t revision(const MainComponent& component) { return component.profileRevision; }
+    static juce::File profileFile(const MainComponent& component) { return component.profileFile; }
+    static void saveTarget(MainComponent& component, const juce::File& file) { component.profileFile = file; }
+    static void resetAll(MainComponent& component) { component.resetAllConfirmed(); }
+    static void seedResetData(MainComponent& component)
+    {
+        component.profile->settings.desiredSamplesPerRegion = 12;
+        velcal::CalibrationPress press;
+        press.accepted = true;
+        press.referenceVelocity = 81;
+        press.notes = {{60, 80, 0}, {62, 82, 1000}};
+        component.profile->presses.push_back(press);
+        component.profile->generated = velcal::calibrate(component.profile->presses, component.profile->settings);
+        component.profile->globalCurve.name = "Gentle";
+        component.profile->globalCurve.curvature = 0.5;
+        component.profile->globalCurve.smooth = false;
+        component.profile->userGlobalPresets.push_back(component.profile->globalCurve);
+        component.profile->noteAdjustments[60] = 7;
+        component.profile->noteCurveOverrides[60].points = {{1, 1}, {64, 85}, {127, 127}};
+        component.keyGroupBox.setSelectedId(2, juce::dontSendNotification);
+        component.markProfileDirty();
+    }
+    static void refreshPresets(MainComponent& component) { component.reloadCurvePresets(); component.refreshCurvePresets(); }
+    static void selectPreset(MainComponent& component, int id)
+    { component.globalPresetBox.setSelectedId(id, juce::dontSendNotification); component.applySelectedCurvePreset(); }
+    static bool canManagePreset(const MainComponent& component)
+    { return component.renamePresetButton.isEnabled() && component.deletePresetButton.isEnabled(); }
+    static bool hasSharedPreset(const MainComponent& component, const juce::String& name)
+    {
+        for (int index = 0; index < component.globalPresetBox.getNumItems(); ++index)
+            if (component.globalPresetBox.getItemText(index) == name
+                && component.globalPresetBox.getItemId(index) >= 1000)
+                return true;
+        return false;
+    }
+    static void storePreset(MainComponent& component, const std::string& name)
+    {
+        auto preset = component.profile->globalCurve;
+        preset.name = name;
+        component.storeCurvePreset(preset, false, component.profileRevision);
+    }
+    static bool profileToolbarFits(MainComponent& component)
+    {
+        const std::array<juce::Component*, 4> controls{&component.profileBox, &component.profileMenuButton,
+            &component.perKeyTabButton, &component.globalTabButton};
+        for (std::size_t index = 0; index < controls.size(); ++index) {
+            const auto bounds = controls[index]->getBounds();
+            if (!controls[index]->isVisible() || bounds.isEmpty()
+                || !component.getLocalBounds().contains(bounds) || bounds.getBottom() > 80
+                || bounds.getHeight() != 38 || bounds.getY() != component.profileBox.getY())
+                return false;
+            for (std::size_t other = 0; other < index; ++other)
+                if (bounds.intersects(controls[other]->getBounds()))
+                    return false;
+        }
+        if (component.profileMenuButton.getRight() >= component.profileBox.getX())
+            return false;
+        if (component.profileBox.getWidth() < 200
+            || component.profileBox.getRight() >= component.perKeyTabButton.getX()
+            || component.perKeyTabButton.getRight() >= component.globalTabButton.getX())
+            return false;
+        if (!component.getLocalBounds().contains(component.updateStatusLabel.getBounds())
+            || component.updateStatusLabel.getBottom() >= component.globalTabButton.getY()
+            || component.updateStatusLabel.getRight() != component.globalTabButton.getRight())
+            return false;
+        for (auto* button : {&component.newProfileButton, &component.openProfileButton,
+                 &component.saveProfileButton, &component.saveAsProfileButton,
+                 &component.resetAllButton, &component.deleteProfileButton})
+            if (button->isVisible())
+                return false;
+        for (auto* control : {&component.renamePresetButton, &component.deletePresetButton})
+            if (!component.getLocalBounds().contains(control->getBounds())
+                || control->getBounds().intersects(component.updateStatusLabel.getBounds()))
+                return false;
+        return true;
+    }
     static void requestNewProfile(MainComponent& component) { component.createNewProfile(); }
+    static bool menuCommandsMatch(const MainComponent& component)
+    {
+        const auto menu = component.profileMenu();
+        juce::PopupMenu::MenuItemIterator iterator(menu);
+        int count = 0;
+        while (iterator.next()) {
+            const auto& item = iterator.getItem();
+            if (item.isSeparator)
+                continue;
+            ++count;
+            bool expected = true;
+            switch (item.itemID) {
+                case 1: case 2: case 7: break;
+                case 3: expected = component.saveProfileButton.isEnabled(); break;
+                case 4: expected = component.saveAsProfileButton.isEnabled(); break;
+                case 5: expected = component.resetAllButton.isEnabled(); break;
+                case 6: expected = component.deleteProfileButton.isEnabled(); break;
+                default: return false;
+            }
+            if (item.isEnabled != expected || item.text.isEmpty())
+                return false;
+        }
+        return count == 7;
+    }
     static std::string name(const MainComponent& component) { return component.profile->profileName; }
     static juce::String displayedProfile(const MainComponent& component) { return component.profileBox.getText(); }
     static void selectCurveTab(MainComponent& component, bool global)
@@ -481,7 +589,7 @@ void accentPreferencePersistsWithoutChangingProfiles()
         expect(velcal::serializeProfile(MainComponentTestAccess::profile(component)) == before
                 && MainComponentTestAccess::dirty(component) == dirty,
             "appearance changes do not modify calibration or dirty state");
-        expect(MainComponentTestAccess::themeButtonFits(component), "theme button fits the minimum editor size");
+        expect(MainComponentTestAccess::profileMenuFits(component), "profile menu button fits the minimum editor size");
         MainComponentTestAccess::openPalette(component);
         expect(MainComponentTestAccess::paletteFits(component), "palette stays inside the editor");
     }
@@ -490,8 +598,8 @@ void accentPreferencePersistsWithoutChangingProfiles()
         MainComponent reopened;
         PluginState plugin;
         MainComponent editor(&plugin);
-        expect(MainComponentTestAccess::globalTab(reopened) && MainComponentTestAccess::globalTab(editor),
-            "standalone and plugin editors recall the global tab after accent changes");
+        expect(MainComponentTestAccess::globalTab(reopened) && !MainComponentTestAccess::globalTab(editor),
+            "standalone recalls its tab while fresh plugins ignore the shared tab preference");
         expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents.back().colour
                 && MainComponentTestAccess::accent(editor) == velcal_ui::accents.back().colour,
             "standalone and plugin editors recall the saved accent");
@@ -510,6 +618,21 @@ void accentPreferencePersistsWithoutChangingProfiles()
         expect(MainComponentTestAccess::accent(reopened) == velcal_ui::accents[12].colour
                 && plugin.serialize() == before,
             "open editors share appearance without changing DAW state");
+        const auto preference = file.loadFileAsString();
+        MainComponentTestAccess::clickCurveTab(editor, true);
+        expect(plugin.snapshot().showingGlobalCurve && file.loadFileAsString() == preference,
+            "plugin tab changes publish host state without changing standalone preferences");
+        {
+            MainComponent nextEditor(&plugin);
+            expect(MainComponentTestAccess::globalTab(nextEditor),
+                "plugin editor reopening recalls its instance's selected tab");
+        }
+        MainComponentTestAccess::clickCurveTab(reopened, false);
+        {
+            MainComponent standalone;
+            expect(!MainComponentTestAccess::globalTab(standalone),
+                "standalone recalls per-key selection independently of plugin tabs");
+        }
         MainComponentTestAccess::accent(editor, velcal_ui::accents.size());
         expect(MainComponentTestAccess::accent(editor) == velcal_ui::accents[12].colour,
             "invalid palette indices are ignored");
@@ -523,7 +646,7 @@ void accentPreferencePersistsWithoutChangingProfiles()
             "unknown saved accents safely fall back to teal");
         file.replaceWithText("{\"accent\":\"Unknown\",\"curveTab\":42}");
         {
-            MainComponent fallback(&plugin);
+            MainComponent fallback;
             expect(!MainComponentTestAccess::globalTab(fallback),
                 "invalid saved tab values safely fall back to per-key");
         }
@@ -643,6 +766,243 @@ void smoothSwitchAppliesToWholeKeyboard()
         expect(curve.smooth, "global curve smoothing remains independent of key-curve smoothing");
 }
 
+void versionIndicatorKeepsInstalledVersionVisible()
+{
+    PluginState state;
+    MainComponent component(&state);
+    const auto installed = juce::String("v") + VELCAL_VERSION;
+    for (const auto& status : {UpdateStatus{},
+             UpdateStatus{"VelCal is up to date", "Installed release", false},
+             UpdateStatus{"Update check unavailable", "Could not reach GitHub releases", false},
+             UpdateStatus{"Update check off", "Checks disabled", false}}) {
+        MainComponentTestAccess::updateStatus(component, status);
+        expect(MainComponentTestAccess::updateText(component) == installed
+                && MainComponentTestAccess::updateTooltip(component).contains(status.text)
+                && MainComponentTestAccess::updateTooltip(component).contains(status.tooltip),
+            "installed version stays visible while detailed check states remain in the tooltip");
+    }
+    for (const auto& latest : {juce::String("0.0.4"), juce::String("v0.0.4"), juce::String("V0.0.4")}) {
+        MainComponentTestAccess::updateStatus(component,
+            {"Update available", "GitHub release", true, latest});
+        expect(MainComponentTestAccess::updateText(component)
+                == installed + " - v0.0.4 is available",
+            "available updates retain installed version and use a single lowercase v prefix");
+        for (const auto size : {juce::Point<int>(860, 820), juce::Point<int>(1180, 820), juce::Point<int>(1800, 1200)}) {
+            component.setSize(size.x, size.y);
+            expect(MainComponentTestAccess::profileToolbarFits(component),
+                "update label sits above Global curve without overlapping the unchanged navigation row");
+        }
+    }
+}
+
+void profileSaveAndResetTransactions()
+{
+    const auto root = velcalProfileDirectory().getChildFile("profile-flow-" + juce::Uuid().toString());
+    expect(root.createDirectory().wasOk(), "profile-flow test folder is created");
+    const auto original = root.getChildFile("Original.velcal.json");
+    const auto copy = root.getChildFile("Copy.velcal.json");
+    PluginState state;
+    MainComponent component(&state);
+    MainComponentTestAccess::seedResetData(component);
+    MainComponentTestAccess::save(component, original);
+    const auto originalBytes = original.loadFileAsString();
+    MainComponentTestAccess::editTrim(component);
+    bool saved = true;
+    const auto complete = [&](const juce::File& target, bool saveAs = false) {
+        MainComponentTestAccess::completeSave(component, target, MainComponentTestAccess::revision(component),
+            [&](bool result) { saved = result; }, saveAs);
+    };
+    complete(original, true);
+    expect(!saved && original.loadFileAsString() == originalBytes
+            && MainComponentTestAccess::dirty(component),
+        "Save As refuses to overwrite the original profile");
+    complete({});
+    expect(!saved && MainComponentTestAccess::dirty(component)
+            && MainComponentTestAccess::profileFile(component) == original,
+        "cancelled first-save/Save As completion preserves edits and file identity");
+    complete(copy, true);
+    expect(saved && !MainComponentTestAccess::dirty(component)
+            && MainComponentTestAccess::profileFile(component) == copy
+            && original.loadFileAsString() == originalBytes,
+        "Save As switches to the saved copy and keeps the original byte-for-byte");
+    const auto copyBytes = copy.loadFileAsString();
+    const auto oldRevision = MainComponentTestAccess::revision(component);
+    MainComponentTestAccess::editTrim(component);
+    const auto stale = root.getChildFile("Stale.velcal.json");
+    MainComponentTestAccess::completeSave(component, stale, oldRevision, [&](bool result) { saved = result; });
+    expect(!saved && !stale.exists() && MainComponentTestAccess::dirty(component),
+        "an outdated save callback cannot save a newer working profile");
+    const auto pendingRevision = MainComponentTestAccess::revision(component);
+    auto recalled = state.snapshot();
+    recalled.profile->noteAdjustments[60] = 12;
+    expect(state.publish(recalled, recalled.revision), "test host state replaces the working profile");
+    MainComponentTestAccess::completeSave(component, stale, pendingRevision, [&](bool result) { saved = result; });
+    expect(!saved && !stale.exists() && MainComponentTestAccess::profile(component).noteAdjustments[60] == 12,
+        "host recall invalidates a pending save before the editor's next timer tick");
+    const auto before = MainComponentTestAccess::profile(component);
+    MainComponentTestAccess::clear(component);
+    auto cleared = MainComponentTestAccess::profile(component);
+    expect(cleared.presses.empty() && cleared.noteAdjustments[60] == 0
+            && cleared.noteCurveOverrides[60].points.empty()
+            && velcal::serializeCurvePresets({cleared.globalCurve}) == velcal::serializeCurvePresets({before.globalCurve})
+            && cleared.settings.desiredSamplesPerRegion == 12 && cleared.userGlobalPresets.size() == 1,
+        "Clear Calibration removes per-key data while preserving global curve, settings and legacy presets");
+    expect(copy.loadFileAsString() == copyBytes && MainComponentTestAccess::dirty(component),
+        "Clear Calibration does not modify the saved file");
+    MainComponentTestAccess::resetAll(component);
+    const auto reset = MainComponentTestAccess::profile(component);
+    expect(reset.profileName == before.profileName && reset.createdUtc == before.createdUtc
+            && reset.inputDevice.name == before.inputDevice.name
+            && reset.settings.desiredSamplesPerRegion == velcal::CalibrationConfig{}.desiredSamplesPerRegion
+            && reset.globalCurve.curvature == 0 && reset.globalCurve.smooth
+            && reset.globalCurve.points.empty() && reset.noteCurveOverrides[60].smooth
+            && reset.userGlobalPresets.size() == 1
+            && MainComponentTestAccess::profileFile(component) == copy && copy.loadFileAsString() == copyBytes,
+        "Reset All restores defaults while preserving identity, legacy presets and the existing file");
+    expect(velcal::serializeProfile(*state.snapshot().profile) == velcal::serializeProfile(reset)
+            && state.snapshot().dirty && state.snapshot().keyGroup == 1,
+        "reset publishes complete unsaved state to the DAW");
+    const auto answer = [](const juce::String& title, int result) {
+        juce::AlertWindow* alert = nullptr;
+        const auto shown = waitForGui([&] {
+            auto* manager = juce::ModalComponentManager::getInstance();
+            for (int index = 0; index < manager->getNumModalComponents(); ++index) {
+                auto* candidate = dynamic_cast<juce::AlertWindow*>(manager->getModalComponent(index));
+                if (candidate != nullptr && candidate->getName() == title) {
+                    alert = candidate;
+                    return true;
+                }
+            }
+            return false;
+        });
+        expect(shown, ("profile-flow dialog appears: " + title).toRawUTF8());
+        if (shown) {
+            const juce::Component::SafePointer<juce::AlertWindow> dismissed(alert);
+            alert->exitModalState(result);
+            expect(waitForGui([&] { return dismissed == nullptr; }),
+                ("profile-flow dialog is dismissed: " + title).toRawUTF8());
+        }
+    };
+    MainComponentTestAccess::requestNewProfile(component);
+    answer("Unsaved profile changes", 1);
+    expect(waitForGui([&] { return !MainComponentTestAccess::discardPromptOpen(component); }),
+        "Save-and-continue callback completes");
+    expect(MainComponentTestAccess::profileFile(component) == juce::File{}
+            && !MainComponentTestAccess::dirty(component)
+            && copy.loadFileAsString() != copyBytes && original.loadFileAsString() == originalBytes,
+        "Save-and-New saves the working copy before creating the new profile");
+    MainComponentTestAccess::editTrim(component);
+    const auto blocked = root.getChildFile("Blocked.velcal.json");
+    expect(blocked.createDirectory().wasOk(), "save failure target is a directory");
+    MainComponentTestAccess::saveTarget(component, blocked);
+    MainComponentTestAccess::requestNewProfile(component);
+    answer("Unsaved profile changes", 1);
+    expect(waitForGui([&] { return !MainComponentTestAccess::discardPromptOpen(component); }),
+        "failed-save continuation completes");
+    expect(MainComponentTestAccess::dirty(component) && MainComponentTestAccess::profileFile(component) == blocked,
+        "failed Save prevents New and retains unsaved edits");
+    answer("Could not save profile", 0);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    expect(root.deleteRecursively(), "profile-flow test files are removed");
+}
+
+void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
+{
+    const auto file = CurvePresetLibrary::file();
+    struct Restore {
+        juce::File file;
+        bool existed;
+        juce::MemoryBlock bytes;
+        bool enabled{true};
+        ~Restore() {
+            if (!enabled) return;
+            if (existed) file.replaceWithData(bytes.getData(), bytes.getSize());
+            else file.deleteFile();
+        }
+    } restore{file, file.existsAsFile(), {}};
+    if (restore.existed && !file.loadFileAsData(restore.bytes)) {
+        expect(false, "existing preset library can be preserved for tests");
+        restore.enabled = false;
+        return;
+    }
+    file.deleteFile();
+    std::string applied;
+    {
+        PluginState state;
+        MainComponent editor(&state);
+        MainComponentTestAccess::seedResetData(editor);
+        MainComponentTestAccess::refreshPresets(editor);
+        MainComponentTestAccess::selectPreset(editor, 100);
+        MainComponentTestAccess::storePreset(editor, "Shared gentle");
+        expect(file.existsAsFile() && CurvePresetLibrary::load().size() == 1
+                && MainComponentTestAccess::hasSharedPreset(editor, "Shared gentle")
+                && state.snapshot().profile->userGlobalPresets.size() == 1,
+            "Save Preset persists immediately without saving the profile");
+        applied = velcal::serializeCurvePresets({state.snapshot().profile->globalCurve});
+    }
+    PluginState state;
+    MainComponent editor(&state);
+    MainComponent standalone;
+    expect(MainComponentTestAccess::hasSharedPreset(editor, "Shared gentle")
+            && MainComponentTestAccess::hasSharedPreset(standalone, "Shared gentle"),
+        "library presets survive editor destruction and appear in standalone and fresh plugin instances");
+    MainComponentTestAccess::selectPreset(editor, 1000);
+    expect(velcal::serializeCurvePresets({state.snapshot().profile->globalCurve}) == applied
+            && MainComponentTestAccess::canManagePreset(editor),
+        "applying a shared preset copies all curve settings into DAW state");
+    const auto hostState = state.serialize();
+    const auto originalBytes = file.loadFileAsString();
+    auto changed = CurvePresetLibrary::load().front();
+    changed.name = "SHARED GENTLE";
+    changed.curvature = -0.4;
+    bool rejected = false;
+    try { CurvePresetLibrary::save(changed, false); }
+    catch (const std::exception&) { rejected = true; }
+    expect(rejected && file.loadFileAsString() == originalBytes,
+        "duplicate names are case-insensitive and cannot silently overwrite a preset");
+    CurvePresetLibrary::save(changed, true);
+    CurvePresetLibrary::rename("shared gentle", "Renamed gentle");
+    MainComponentTestAccess::refreshPresets(editor);
+    expect(state.serialize() == hostState && MainComponentTestAccess::hasSharedPreset(editor, "Renamed gentle")
+            && !MainComponentTestAccess::canManagePreset(editor),
+        "replacing and renaming library entries leaves the applied curve and host state unchanged");
+    CurvePresetLibrary::remove("Renamed gentle");
+    MainComponentTestAccess::refreshPresets(editor);
+    expect(state.serialize() == hostState && CurvePresetLibrary::load().empty(),
+        "deleting a library preset leaves its applied copy intact");
+    PluginState recalled;
+    expect(recalled.restore(hostState)
+            && velcal::serializeCurvePresets({recalled.snapshot().profile->globalCurve}) == applied,
+        "DAW recall needs no library file for an applied curve");
+    const auto valid = file.loadFileAsString();
+    file.replaceWithText("{broken");
+    rejected = false;
+    try { CurvePresetLibrary::save(changed, false); }
+    catch (const std::exception&) { rejected = true; }
+    expect(rejected && file.loadFileAsString() == "{broken",
+        "a damaged library is never silently overwritten");
+    file.replaceWithText(valid);
+    CurvePresetLibrary::save(changed, false);
+    auto second = changed;
+    second.name = "Another curve";
+    CurvePresetLibrary::save(second, false);
+    rejected = false;
+    try { CurvePresetLibrary::rename(second.name, changed.name); }
+    catch (const std::exception&) { rejected = true; }
+    expect(rejected && CurvePresetLibrary::load().size() == 2,
+        "renaming cannot overwrite another preset");
+    for (const auto size : {juce::Point<int>(860, 820), juce::Point<int>(1180, 820), juce::Point<int>(1800, 1200)})
+        for (const bool global : {false, true})
+            for (auto* component : {&editor, &standalone}) {
+                component->setSize(size.x, size.y);
+                MainComponentTestAccess::selectCurveTab(*component, global);
+                expect(MainComponentTestAccess::profileToolbarFits(*component),
+                    "menu, profile selector and tabs share a non-overlapping 38px header at supported sizes");
+                expect(MainComponentTestAccess::menuCommandsMatch(*component),
+                    "profile menu includes all six actions and accent colour with current enabled states");
+            }
+}
+
 void unsavedChangesRequireConfirmation()
 {
     MainComponent component;
@@ -660,7 +1020,7 @@ void unsavedChangesRequireConfirmation()
         const auto shown = waitForGui([&alert] {
             alert = dynamic_cast<juce::AlertWindow*>(
                 juce::ModalComponentManager::getInstance()->getModalComponent(0));
-            return alert != nullptr && alert->getName() == "Discard unsaved changes?";
+            return alert != nullptr && alert->getName() == "Unsaved profile changes";
         });
         expect(shown, "discard confirmation is shown before the timeout");
         if (!shown)
@@ -676,7 +1036,7 @@ void unsavedChangesRequireConfirmation()
     answerPrompt(0);
     expect(!closed && MainComponentTestAccess::dirty(component), "Cancel retains unsaved edits");
     component.requestClose([&closed] { closed = true; });
-    answerPrompt(1);
+    answerPrompt(2);
     expect(closed, "Discard allows closing");
 
     const auto path = std::filesystem::current_path() / "velcal-app-load-test.velcal.json";
@@ -692,7 +1052,7 @@ void unsavedChangesRequireConfirmation()
             && MainComponentTestAccess::dirty(component),
         "Cancel preserves the previous profile when switching");
     MainComponentTestAccess::load(component, file);
-    answerPrompt(1);
+    answerPrompt(2);
     expect(MainComponentTestAccess::name(component) == "Replacement"
             && !MainComponentTestAccess::dirty(component),
         "confirming a switch loads the requested profile and clears the dirty flag");
@@ -742,6 +1102,9 @@ int main()
     firstSmoothClickAppliesToNewCurve();
     smoothPreservesAutomaticCalibration();
     smoothSwitchAppliesToWholeKeyboard();
+    profileSaveAndResetTransactions();
+    versionIndicatorKeepsInstalledVersionVisible();
+    sharedCurveLibraryPersistsAndKeepsAppliedCopies();
     unsavedChangesRequireConfirmation();
     if (failures == 0)
         std::cout << "All VelCal app tests passed.\n";

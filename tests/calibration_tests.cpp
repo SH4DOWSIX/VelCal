@@ -439,6 +439,33 @@ void coverageRequiresEachSampledKeyAndRejectsOutliers()
         "a rejected firm outlier prevents full coverage even with enough total presses");
 }
 
+void curvePresetLibraryRoundTripsAndValidates()
+{
+    velcal::VelocityCurveSettings curve;
+    curve.name = "Gentle";
+    curve.curvature = 0.5;
+    curve.minimumOutput = 9;
+    curve.maximumOutput = 115;
+    curve.smooth = false;
+    curve.points = {{1, 9}, {64, 72}, {127, 115}};
+    const auto bytes = velcal::serializeCurvePresets({curve});
+    const auto restored = velcal::deserializeCurvePresets(bytes);
+    expect(restored.size() == 1 && velcal::serializeCurvePresets(restored) == bytes,
+        "preset library preserves curve name, parameters, points and Smooth");
+    expect(velcal::deserializeCurvePresets(velcal::serializeCurvePresets({})).empty(),
+        "empty preset libraries round trip");
+    for (const auto& invalid : {std::string("{broken"),
+             std::string("{\"velcalCurvePresets\":2,\"presets\":[]}"),
+             std::string("{\"velcalCurvePresets\":1,\"presets\":{}}"),
+             std::string("{\"velcalCurvePresets\":1,\"presets\":[{\"minimumOutput\":0}]}"),
+             std::string("{\"velcalCurvePresets\":1,\"presets\":[{\"points\":[{\"input\":2,\"output\":3}]}]}")}) {
+        bool rejected = false;
+        try { static_cast<void>(velcal::deserializeCurvePresets(invalid)); }
+        catch (const std::exception&) { rejected = true; }
+        expect(rejected, "malformed, future-version and invalid curve libraries are rejected");
+    }
+}
+
 void failedProfileSavesPreservePreviousFile()
 {
     const auto directory = std::filesystem::current_path() / "velcal-atomic-save-test";
@@ -501,6 +528,7 @@ int main()
     crowdedCurvePointsRemainEditable();
     coverageRequiresEachSampledKeyAndRejectsOutliers();
     failedProfileSavesPreservePreviousFile();
+    curvePresetLibraryRoundTripsAndValidates();
 
     if (failures == 0) {
         std::cout << "All VelCal core tests passed.\n";
