@@ -53,6 +53,16 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+0.0.4 release publication authorized (2026-10-07): the user reported builds
+complete and requested publication. Verified run 37600534097 completed
+successfully for Windows x64, Linux x64 and universal macOS, including tests,
+packaging and installer checks (macOS also installed AU validation). Release
+tag must point to tested revision `ed89215e9ef9b85e448ca6c4bfba3814e9d083e1`;
+subsequent commits are documentation only. Download the four installer files
+under build/releases/0.0.4, verify assets, and publish with SHA256SUMS.txt and
+docs/releases/0.0.4.md. No additional builds are requested. Retain the
+Windows-only real hardware/DAW validation caveat.
+
 All-platform build and conditional release authorized (2026-10-07): the user
 requested fresh Windows x64, Linux x64 and universal macOS installer jobs for
 0.0.4. Release notes prepared; the manual workflow was dispatched with
