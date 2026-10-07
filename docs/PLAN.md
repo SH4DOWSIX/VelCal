@@ -53,6 +53,14 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+All-platform build and conditional release authorized (2026-10-07): the user
+requested fresh Windows x64, Linux x64 and universal macOS installer jobs for
+0.0.4. Prepare release notes and dispatch the manual workflow with platform=all.
+Do not poll; wait for the user's results before checking the completed run.
+Publish 0.0.4 only after all requested jobs pass and release artifacts are
+verified. No local build requested. Linux/macOS real hardware/DAW validation
+remains outstanding, and release notes must retain that limitation.
+
 Source push authorized (2026-10-07): the user requested pushing this session's
 DAW tab recall, profile/reset/save flow, shared preset library, compact header,
 version indicator and version 0.0.4 changes. The proposed played-note-follow
