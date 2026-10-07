@@ -15,7 +15,7 @@ Installers include standalone and VST3 on Windows, Linux, and
 macOS, plus an AU MIDI effect for Logic on macOS. Only Windows has real keyboard
 and DAW validation; Linux/macOS are experimental. See
 [installation and DAW routing](docs/INSTALLING.md) and
-[0.0.3 release notes](docs/releases/0.0.3.md), including unsigned-installer warnings
+[0.0.4 release notes](docs/releases/0.0.4.md), including unsigned-installer warnings
 and build-verification status.
 
 ## What You Can Do
@@ -35,13 +35,13 @@ and build-verification status.
 
 ## Screenshots
 
-**Per-key calibration**: keyboard coverage, section statistics, and the selected
-key's velocity curve.
+**Per-key calibration**: compact profile and tab controls, keyboard coverage,
+section statistics, and the selected key's velocity curve.
 
 ![VelCal per-key calibration with keyboard status colours, calibration statistics and an editable velocity curve](docs/images/per-key-calibration.png)
 
-**Global curve**: shape the whole keyboard's response with presets, touch curve,
-and output limits.
+**Global curve**: shape the whole keyboard's response with shared presets, touch
+curve, and output limits.
 
 ![VelCal global velocity curve with preset selection, touch curve and minimum and maximum output controls](docs/images/global-velocity-curve.png)
 
@@ -188,8 +188,8 @@ The choice takes effect immediately, is remembered across restarts, and is share
 by standalone and plugin editors. It does not alter your calibration profiles.
 
 The small version label above **Global curve** shows the installed version
-(for example, `v0.0.3`). When a newer release is found, it also shows
-`v0.0.4 is available`. Check details are in its tooltip; checking or an unavailable
+(for example, `v0.0.4`). When a newer release is found, it shows
+`v0.0.4 - v0.0.5 is available`. Check details are in its tooltip; checking or an unavailable
 check leaves the installed version visible. It does not download or install updates automatically;
 use the [release downloads](https://github.com/SH4DOWSIX/VelCal/releases/latest)
 to update. Your saved profiles/preferences are retained during an upgrade.
