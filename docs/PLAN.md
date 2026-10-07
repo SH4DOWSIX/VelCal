@@ -53,15 +53,17 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
-0.0.4 release publication authorized (2026-10-07): the user reported builds
-complete and requested publication. Verified run 37600534097 completed
-successfully for Windows x64, Linux x64 and universal macOS, including tests,
-packaging and installer checks (macOS also installed AU validation). Release
-tag must point to tested revision `ed89215e9ef9b85e448ca6c4bfba3814e9d083e1`;
-subsequent commits are documentation only. Download the four installer files
-under build/releases/0.0.4, verify assets, and publish with SHA256SUMS.txt and
-docs/releases/0.0.4.md. No additional builds are requested. Retain the
-Windows-only real hardware/DAW validation caveat.
+0.0.4 published (2026-10-07), after the user requested publication:
+https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.4
+Verified run 37600534097 passed for Windows x64, Linux x64 and universal macOS,
+including tests, packaging and installer checks (macOS also installed AU
+validation). Public tag 0.0.4 points to tested revision
+`ed89215e9ef9b85e448ca6c4bfba3814e9d083e1`; subsequent commits are documentation
+only. Four installer assets plus SHA256SUMS.txt were uploaded, with each GitHub
+asset size and SHA256 digest matching local files under build/releases/0.0.4.
+Verified non-draft/non-prerelease publication and latest-release status. Notes
+in docs/releases/0.0.4.md retain the Windows-only real hardware/DAW validation
+caveat. No additional builds were run or requested.
 
 All-platform build and conditional release authorized (2026-10-07): the user
 requested fresh Windows x64, Linux x64 and universal macOS installer jobs for
