@@ -42,13 +42,14 @@ PluginState::Snapshot PluginState::snapshot() const
 bool PluginState::publish(Snapshot next, std::uint64_t expectedRevision)
 {
     const auto maps = mapsFor(next);
+    const auto perKey = next.profile ? velcal::perKeyMaps(*next.profile) : maps;
     {
         const std::scoped_lock lock(mutex);
         if (current.revision != expectedRevision)
             return false;
         next.revision = current.revision + 1;
         current = std::move(next);
-        midi.setMaps(maps);
+        midi.setMaps(maps, perKey);
     }
     if (onChange)
         onChange();
@@ -83,10 +84,11 @@ bool PluginState::restore(const std::string& data)
         if (juce::File::isAbsolutePath(path))
             next.profileFile = juce::File(path);
         const auto maps = mapsFor(next);
+        const auto perKey = next.profile ? velcal::perKeyMaps(*next.profile) : maps;
         const std::scoped_lock lock(mutex);
         next.revision = current.revision + 1;
         current = std::move(next);
-        midi.setMaps(maps);
+        midi.setMaps(maps, perKey);
         midi.stopHostCapture();
         return true;
     } catch (const std::exception&) {

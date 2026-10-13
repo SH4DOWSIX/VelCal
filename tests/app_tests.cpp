@@ -13,7 +13,7 @@ struct MidiEngineTestAccess {
     static bool start(MidiEngine& engine, juce::String& error)
     {
         engine.stopRouting();
-        return engine.startOutput("test", false, error);
+        return engine.startOutput("test", error);
     }
     static void receive(MidiEngine& engine, const juce::MidiMessage& message)
     { engine.handleIncomingMidiMessage(nullptr, message); }
@@ -65,9 +65,9 @@ struct MainComponentTestAccess {
     static void clear(MainComponent& component) { component.clearMeasurementsConfirmed(); }
     static bool dirty(const MainComponent& component) { return component.profileDirty; }
     static bool discardPromptOpen(const MainComponent& component) { return component.discardPromptOpen; }
-    static void editTrim(MainComponent& component)
+    static void editTrim(MainComponent& component, int trim = 4)
     {
-        component.keyAdjustmentSlider.setValue(4, juce::dontSendNotification);
+        component.keyAdjustmentSlider.setValue(trim, juce::dontSendNotification);
         component.sliderValueChanged(&component.keyAdjustmentSlider);
     }
     static bool hasDirtyMarker(const MainComponent& component)
@@ -118,6 +118,36 @@ struct MainComponentTestAccess {
         preset.name = name;
         component.storeCurvePreset(preset, false, component.profileRevision);
     }
+    static void importPreset(MainComponent& component, const juce::File& file)
+    { component.importCurvePresetFile(file, component.profileRevision); }
+    static void poll(MainComponent& component) { component.timerCallback(); }
+    static void receive(MainComponent& component, const juce::MidiMessage& message)
+    { MidiEngineTestAccess::receive(component.midiEngine, message); }
+    static double scrollStart(const MainComponent& component)
+    { return component.keyboardScrollBar.getCurrentRangeStart(); }
+    static void dragCurve(MainComponent& component, bool dragging)
+    {
+        if (dragging) component.activeCurvePoint = 0;
+        else component.activeCurvePoint.reset();
+    }
+    static void seedVelocityDisplay(MainComponent& component)
+    {
+        component.profile->noteCurveOverrides[61].points = {{1, 1}, {64, 80}, {127, 127}};
+        component.profile->noteCurveOverrides[61].smooth = false;
+        component.profile->noteAdjustments[61] = 4;
+        component.profile->globalCurve.curvature = 0.5;
+        component.profile->globalCurve.minimumOutput = 10;
+        component.profile->globalCurve.maximumOutput = 110;
+        component.markProfileDirty();
+        component.updateEffectiveMaps();
+    }
+    static std::optional<std::array<int, 4>> playedVelocity(const MainComponent& component)
+    {
+        const auto played = component.displayedPlayedVelocity();
+        if (!played)
+            return std::nullopt;
+        return std::array<int, 4>{played->note, played->input, played->output, played->midiOutput};
+    }
     static bool profileToolbarFits(MainComponent& component)
     {
         const std::array<juce::Component*, 4> controls{&component.profileBox, &component.profileMenuButton,
@@ -147,7 +177,8 @@ struct MainComponentTestAccess {
                  &component.resetAllButton, &component.deleteProfileButton})
             if (button->isVisible())
                 return false;
-        for (auto* control : {&component.renamePresetButton, &component.deletePresetButton})
+        for (auto* control : {&component.renamePresetButton, &component.deletePresetButton,
+                 &component.importPresetButton, &component.exportPresetButton})
             if (!component.getLocalBounds().contains(control->getBounds())
                 || control->getBounds().intersects(component.updateStatusLabel.getBounds()))
                 return false;
@@ -304,7 +335,7 @@ private:
 
 MidiEngine::OutputFactory fakeFactory(const std::shared_ptr<FakeState>& state)
 {
-    return [state](const juce::String&, bool) -> std::unique_ptr<MidiEngine::OutputDevice> {
+    return [state](const juce::String&) -> std::unique_ptr<MidiEngine::OutputDevice> {
         std::unique_lock lock(state->mutex);
         state->openEntered = true;
         state->changed.wait(lock, [&state] { return !state->blockOpen || state->released; });
@@ -421,7 +452,7 @@ void blockedDriversDoNotOwnTheEngine()
 
 void outputFailuresAreReported()
 {
-    MidiEngine engine([](const juce::String&, bool) -> std::unique_ptr<MidiEngine::OutputDevice> { return {}; });
+    MidiEngine engine([](const juce::String&) -> std::unique_ptr<MidiEngine::OutputDevice> { return {}; });
     juce::String error;
     expect(MidiEngineTestAccess::start(engine, error), "output failure is handled asynchronously");
     expect(waitFor([&engine] { return engine.getActivity().outputError.isNotEmpty(); }),
@@ -444,8 +475,8 @@ void recoveredOutputsCanRestartWithoutStaleMessages()
     const auto newState = std::make_shared<FakeState>();
     oldState->blockSend = true;
     const auto opened = std::make_shared<std::atomic<int>>(0);
-    MidiEngine engine([oldState, newState, opened](const juce::String& id, bool isVirtual) {
-        return fakeFactory(opened->fetch_add(1) == 0 ? oldState : newState)(id, isVirtual);
+    MidiEngine engine([oldState, newState, opened](const juce::String& id) {
+        return fakeFactory(opened->fetch_add(1) == 0 ? oldState : newState)(id);
     });
     expect(startReady(engine), "initial recovery-test output opens");
     MidiEngineTestAccess::receive(engine, juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(80)));
@@ -781,11 +812,11 @@ void versionIndicatorKeepsInstalledVersionVisible()
                 && MainComponentTestAccess::updateTooltip(component).contains(status.tooltip),
             "installed version stays visible while detailed check states remain in the tooltip");
     }
-    for (const auto& latest : {juce::String("0.0.4"), juce::String("v0.0.4"), juce::String("V0.0.4")}) {
+    for (const auto& latest : {juce::String("0.0.6"), juce::String("v0.0.6"), juce::String("V0.0.6")}) {
         MainComponentTestAccess::updateStatus(component,
             {"Update available", "GitHub release", true, latest});
         expect(MainComponentTestAccess::updateText(component)
-                == installed + " - v0.0.4 is available",
+                == installed + " - v0.0.6 is available",
             "available updates retain installed version and use a single lowercase v prefix");
         for (const auto size : {juce::Point<int>(860, 820), juce::Point<int>(1180, 820), juce::Point<int>(1800, 1200)}) {
             component.setSize(size.x, size.y);
@@ -914,8 +945,14 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
         bool existed;
         juce::MemoryBlock bytes;
         bool enabled{true};
+        std::vector<std::pair<juce::File, juce::MemoryBlock>> curveFiles;
         ~Restore() {
             if (!enabled) return;
+            for (const auto& curve : CurvePresetLibrary::directory().findChildFiles(
+                     juce::File::findFiles, false, "*.velcal-curve.json"))
+                curve.deleteFile();
+            for (const auto& saved : curveFiles)
+                saved.first.replaceWithData(saved.second.getData(), saved.second.getSize());
             if (existed) file.replaceWithData(bytes.getData(), bytes.getSize());
             else file.deleteFile();
         }
@@ -924,6 +961,16 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
         expect(false, "existing preset library can be preserved for tests");
         restore.enabled = false;
         return;
+    }
+    for (const auto& curve : CurvePresetLibrary::directory().findChildFiles(
+             juce::File::findFiles, false, "*.velcal-curve.json")) {
+        juce::MemoryBlock bytes;
+        if (!curve.loadFileAsData(bytes)) {
+            expect(false, "existing individual curves can be preserved for tests");
+            restore.enabled = false;
+            return;
+        }
+        restore.curveFiles.emplace_back(curve, std::move(bytes));
     }
     file.deleteFile();
     std::string applied;
@@ -939,6 +986,14 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
                 && state.snapshot().profile->userGlobalPresets.size() == 1,
             "Save Preset persists immediately without saving the profile");
         applied = velcal::serializeCurvePresets({state.snapshot().profile->globalCurve});
+        const auto individual = CurvePresetLibrary::curveFile("Shared gentle");
+        expect(individual.existsAsFile()
+                && velcal::serializeCurvePresets({CurvePresetLibrary::readCurveFile(individual)}) == applied,
+            "saving a preset also writes one independently shareable curve file");
+        individual.deleteFile();
+        CurvePresetLibrary::loadWithIndividualFiles();
+        expect(individual.existsAsFile() && file.existsAsFile(),
+            "an existing library gains individual files without losing its original data");
     }
     PluginState state;
     MainComponent editor(&state);
@@ -962,11 +1017,18 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
         "duplicate names are case-insensitive and cannot silently overwrite a preset");
     CurvePresetLibrary::save(changed, true);
     CurvePresetLibrary::rename("shared gentle", "Renamed gentle");
+    expect(!CurvePresetLibrary::curveFile("Shared gentle").existsAsFile()
+            && !CurvePresetLibrary::curveFile("SHARED GENTLE").existsAsFile()
+            && CurvePresetLibrary::readCurveFile(CurvePresetLibrary::curveFile("Renamed gentle")).name
+                == "Renamed gentle",
+        "rename updates the individual file and removes the old saved copy");
     MainComponentTestAccess::refreshPresets(editor);
     expect(state.serialize() == hostState && MainComponentTestAccess::hasSharedPreset(editor, "Renamed gentle")
             && !MainComponentTestAccess::canManagePreset(editor),
         "replacing and renaming library entries leaves the applied curve and host state unchanged");
     CurvePresetLibrary::remove("Renamed gentle");
+    expect(!CurvePresetLibrary::curveFile("Renamed gentle").existsAsFile(),
+        "deleting a preset removes its individual library file");
     MainComponentTestAccess::refreshPresets(editor);
     expect(state.serialize() == hostState && CurvePresetLibrary::load().empty(),
         "deleting a library preset leaves its applied copy intact");
@@ -991,6 +1053,39 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
     catch (const std::exception&) { rejected = true; }
     expect(rejected && CurvePresetLibrary::load().size() == 2,
         "renaming cannot overwrite another preset");
+    const juce::TemporaryFile sharedFile(file.getSiblingFile("curve-sharing-test.json"));
+    auto imported = changed;
+    imported.name = "Imported custom curve";
+    imported.points = {{1, 9}, {64, 91}, {127, 120}};
+    imported.smooth = false;
+    CurvePresetLibrary::writeCurveFile(sharedFile.getFile(), imported);
+    const auto beforeImport = state.snapshot().profile;
+    MainComponentTestAccess::importPreset(editor, sharedFile.getFile());
+    const auto afterImport = state.snapshot().profile;
+    expect(velcal::serializeCurvePresets({afterImport->globalCurve})
+                == velcal::serializeCurvePresets({imported})
+            && afterImport->noteAdjustments == beforeImport->noteAdjustments
+            && velcal::serializeProfile(*beforeImport)
+                == [&] { auto copy = *afterImport; copy.globalCurve = beforeImport->globalCurve;
+                    return velcal::serializeProfile(copy); }(),
+        "import applies all curve settings without changing per-key calibration or other profile data");
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 62, static_cast<juce::uint8>(64)), 0);
+    state.midi.processHostMidi(midi, 48000.0, 128);
+    expect((*midi.begin()).getMessage().getVelocity() == velcal::effectiveMaps(*afterImport)[62].apply(64),
+        "import publishes the applied curve to the MIDI processing maps immediately");
+    sharedFile.getFile().replaceWithText(velcal::serializeCurvePresets({imported, changed}));
+    rejected = false;
+    try { static_cast<void>(CurvePresetLibrary::readCurveFile(sharedFile.getFile())); }
+    catch (const std::exception&) { rejected = true; }
+    expect(rejected, "a whole preset library cannot be mistaken for a single shared curve");
+    sharedFile.getFile().replaceWithText("{broken");
+    rejected = false;
+    try { static_cast<void>(CurvePresetLibrary::readCurveFile(sharedFile.getFile())); }
+    catch (const std::exception&) { rejected = true; }
+    expect(rejected, "malformed curve files are rejected");
+    expect(CurvePresetLibrary::curveFile("../unsafe/name").getParentDirectory() == CurvePresetLibrary::directory(),
+        "preset names cannot escape the individual curve directory");
     for (const auto size : {juce::Point<int>(860, 820), juce::Point<int>(1180, 820), juce::Point<int>(1800, 1200)})
         for (const bool global : {false, true})
             for (auto* component : {&editor, &standalone}) {
@@ -1001,6 +1096,99 @@ void sharedCurveLibraryPersistsAndKeepsAppliedCopies()
                 expect(MainComponentTestAccess::menuCommandsMatch(*component),
                     "profile menu includes all six actions and accent colour with current enabled states");
             }
+}
+
+void playedNotesSelectKeysWithoutChangingProfiles()
+{
+    PluginState state;
+    MainComponent plugin(&state);
+    MainComponent standalone;
+    for (auto* component : {&plugin, &standalone}) {
+        MainComponentTestAccess::newProfile(*component);
+        MainComponentTestAccess::seedVelocityDisplay(*component);
+        MainComponentTestAccess::selectCurveTab(*component, false);
+        component->setSize(860, 820);
+        const auto profileBefore = velcal::serializeProfile(MainComponentTestAccess::profile(*component));
+        const auto revision = MainComponentTestAccess::revision(*component);
+        const auto send = [&](const juce::MidiMessage& message) {
+            if (component == &plugin) {
+                juce::MidiBuffer midi;
+                midi.addEvent(message, 0);
+                state.midi.processHostMidi(midi, 48000.0, 128);
+            } else {
+                MainComponentTestAccess::receive(*component, message);
+            }
+        };
+        MainComponentTestAccess::poll(*component);
+        expect(!MainComponentTestAccess::playedVelocity(*component),
+            "velocity display is empty until the first strike");
+        expect(MainComponentTestAccess::selectedNote(*component) == 60,
+            "an editor with no played note does not jump to MIDI note zero");
+        send(juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(80)));
+        send(juce::MidiMessage::noteOn(1, 108, static_cast<juce::uint8>(90)));
+        send(juce::MidiMessage::noteOff(1, 108));
+        send(juce::MidiMessage::controllerEvent(1, 64, 127));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 108
+                && MainComponentTestAccess::scrollStart(*component) > 0,
+            "the most recent note-on selects and reveals the high key, ignoring releases and controllers");
+        MainComponentTestAccess::selectNote(*component, 60);
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 60,
+            "manual selection persists until another note is played");
+        send(juce::MidiMessage::noteOn(1, 108, static_cast<juce::uint8>(90)));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 108,
+            "repeating the same physical key selects it again after a manual selection");
+        send(juce::MidiMessage::noteOn(1, 21, static_cast<juce::uint8>(80)));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 21
+                && MainComponentTestAccess::scrollStart(*component) == 0,
+            "the lowest piano key is revealed at the left edge");
+        MainComponentTestAccess::dragCurve(*component, true);
+        send(juce::MidiMessage::noteOn(1, 61, static_cast<juce::uint8>(80)));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 21,
+            "incoming notes do not retarget a curve while a point is being dragged");
+        MainComponentTestAccess::dragCurve(*component, false);
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::selectedNote(*component) == 61,
+            "played-key selection resumes after curve editing ends");
+        MainComponentTestAccess::selectCurveTab(*component, true);
+        send(juce::MidiMessage::noteOn(1, 64, static_cast<juce::uint8>(80)));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::globalTab(*component)
+                && MainComponentTestAccess::selectedNote(*component) == 64,
+            "played notes track selection without switching away from the global curve tab");
+        send(juce::MidiMessage::noteOn(1, 61, static_cast<juce::uint8>(64)));
+        MainComponentTestAccess::poll(*component);
+        const auto finalVelocity = velcal::effectiveMaps(MainComponentTestAccess::profile(*component))[61].apply(64);
+        const auto globalPlayed = MainComponentTestAccess::playedVelocity(*component);
+        expect(globalPlayed && *globalPlayed == std::array<int, 4>{61, 84, finalVelocity, finalVelocity},
+            "global graph reports its actual input after per-key correction and final MIDI output");
+        MainComponentTestAccess::selectCurveTab(*component, false);
+        const auto perKeyPlayed = MainComponentTestAccess::playedVelocity(*component);
+        expect(perKeyPlayed && *perKeyPlayed == std::array<int, 4>{61, 64, 84, finalVelocity},
+            "per-key graph reports raw input, corrected key velocity including trim, and final MIDI output");
+        send(juce::MidiMessage::noteOn(1, 61, static_cast<juce::uint8>(0)));
+        send(juce::MidiMessage::noteOff(1, 61));
+        send(juce::MidiMessage::controllerEvent(1, 64, 0));
+        MainComponentTestAccess::poll(*component);
+        expect(MainComponentTestAccess::playedVelocity(*component) == perKeyPlayed,
+            "note releases, zero-velocity note-ons and controllers retain the last strike");
+        MainComponentTestAccess::selectNote(*component, 62);
+        expect(!MainComponentTestAccess::playedVelocity(*component),
+            "a manually selected unplayed key does not borrow another key's velocity");
+        MainComponentTestAccess::selectNote(*component, 61);
+        expect(MainComponentTestAccess::playedVelocity(*component) == perKeyPlayed,
+            "returning to a played key restores its own latest strike");
+        expect(MainComponentTestAccess::revision(*component) == revision
+                && velcal::serializeProfile(MainComponentTestAccess::profile(*component)) == profileBefore,
+            "following MIDI notes leaves calibration data and the dirty revision unchanged");
+        MainComponentTestAccess::editTrim(*component, 9);
+        expect(MainComponentTestAccess::playedVelocity(*component) == perKeyPlayed,
+            "editing a curve does not recalculate the historical strike's velocities");
+    }
 }
 
 void unsavedChangesRequireConfirmation()
@@ -1105,6 +1293,7 @@ int main()
     profileSaveAndResetTransactions();
     versionIndicatorKeepsInstalledVersionVisible();
     sharedCurveLibraryPersistsAndKeepsAppliedCopies();
+    playedNotesSelectKeysWithoutChangingProfiles();
     unsavedChangesRequireConfirmation();
     if (failures == 0)
         std::cout << "All VelCal app tests passed.\n";

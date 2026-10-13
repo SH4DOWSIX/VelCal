@@ -379,6 +379,23 @@ void automaticSmoothingRemovesKinksWithoutLosingCalibration()
         expect(!curve.smooth, "legacy mixed per-key smoothing loads as whole-keyboard Smooth off");
     expect(recalled.noteCurveOverrides[60].points.size() == 3,
         "legacy smoothing normalization preserves manual curve points");
+    profile.noteAdjustments[60] = 7;
+    profile.noteAdjustments[61] = -24;
+    profile.globalCurve.curvature = 0.5;
+    profile.globalCurve.minimumOutput = 10;
+    profile.globalCurve.maximumOutput = 110;
+    const auto perKey = velcal::perKeyMaps(profile);
+    const auto composed = velcal::effectiveMaps(profile);
+    const auto global = velcal::makeVelocityCurve(0.5, 10, 110);
+    expect(perKey[60].apply(40) == 67, "intermediate maps include manual correction and per-key trim");
+    for (std::size_t note = 0; note < composed.size(); ++note) {
+        expect(perKey[note].apply(0) == 0 && composed[note].apply(0) == 0,
+            "intermediate and final maps preserve zero-velocity note-off semantics");
+        for (int velocity = 1; velocity <= 127; ++velocity)
+            expect(composed[note].apply(static_cast<std::uint8_t>(velocity))
+                    == global.apply(perKey[note].apply(static_cast<std::uint8_t>(velocity))),
+                "final maps compose the reported per-key stage with the global curve");
+    }
 }
 
 void crowdedCurvePointsRemainEditable()

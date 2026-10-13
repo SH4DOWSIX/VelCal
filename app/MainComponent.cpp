@@ -111,60 +111,156 @@ private:
     std::array<juce::TextButton, velcal_ui::accents.size()> buttons;
 };
 
+class CaptureGuideContent final : public juce::Component {
+public:
+    CaptureGuideContent(const juce::String& groupName, juce::uint32 accent) : accentColour(accent)
+    {
+        const juce::Font regular(juce::FontOptions(14.0f));
+        const juce::Font bold(juce::FontOptions(14.0f, juce::Font::bold));
+        const auto text = juce::Colour(textPrimary);
+        introduction.append("What calibration does\n", bold, text);
+        introduction.append("Helps individual keys respond more evenly when played with similar strength, "
+            "reducing differences where some keys consistently play louder or softer.\n\n", regular, text);
+        introduction.append("What it won't do\n", bold, text);
+        introduction.append("It won't change the keyboard's physical feel or repair mechanical faults. "
+            "It also won't make every note equally loud: differences in how softly or firmly you play are preserved.",
+            regular, text);
+        steps[0].append("Use a clean, rigid straight object, such as a spirit level, ", regular, text);
+        steps[0].append("no longer than 50 cm", bold, text);
+        steps[0].append(". Start with a short, continuous group of " + groupName
+            + " keys; fewer keys are easier to press together.", regular, text);
+        steps[1].append("Place it across the front ends of the keys, closest to you, parallel to the keyboard's front edge. "
+            "Press at the centre of the object. Keep it level and in the same position.", regular, text);
+        steps[2].append("Press the keys together and fully release them each time. "
+            "Mix soft, medium and firm presses, following the live guidance.", regular, text);
+        steps[3].append("Select Finish section when ready. Overlap neighbouring sections by at least two keys of the same colour. "
+            "Calibrate white and black keys separately, then save your profile.", regular, text);
+        warning.append("Faster key movement produces higher velocities. Several keys reaching the bottom of their travel "
+            "together can make a louder mechanical thump.\n\n", regular, text);
+        warning.append("Do not force it or continue through discomfort. ", bold, juce::Colour(amber));
+        warning.append("Try a shorter object covering fewer keys. If reaching Firm still feels uncomfortable, "
+            "stop and manually adjust the affected keys' velocity curves instead.", regular, text);
+    }
+
+    int prepareLayout(int width)
+    {
+        introductionLayout.createLayout(introduction, static_cast<float>(std::max(1, width)));
+        auto y = 4.0f + introductionLayout.getHeight() + 24.0f;
+        const auto textWidth = static_cast<float>(std::max(1, width - 40));
+        for (std::size_t index = 0; index < steps.size(); ++index) {
+            layouts[index].createLayout(steps[index], textWidth);
+            stepY[index] = y;
+            y += std::max(24.0f, layouts[index].getHeight()) + 18.0f;
+        }
+        warningY = y;
+        warningLayout.createLayout(warning, static_cast<float>(std::max(1, width - 32)));
+        return static_cast<int>(std::ceil(warningY + 46.0f + warningLayout.getHeight() + 16.0f));
+    }
+
+    void paint(juce::Graphics& graphics) override
+    {
+        introductionLayout.draw(graphics, {0.0f, 4.0f, static_cast<float>(getWidth()),
+            introductionLayout.getHeight()});
+        for (std::size_t index = 0; index < steps.size(); ++index) {
+            const auto number = juce::Rectangle<float>(0.0f, stepY[index], 24.0f, 24.0f);
+            graphics.setColour(juce::Colour(accentColour).withAlpha(0.12f));
+            graphics.fillEllipse(number);
+            graphics.setColour(juce::Colour(accentColour));
+            graphics.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+            graphics.drawText(juce::String(static_cast<int>(index + 1)), number, juce::Justification::centred);
+            layouts[index].draw(graphics, {40.0f, stepY[index], static_cast<float>(getWidth() - 40),
+                layouts[index].getHeight()});
+        }
+        const auto band = juce::Rectangle<float>(0.0f, warningY, static_cast<float>(getWidth()),
+            static_cast<float>(getHeight()) - warningY);
+        graphics.setColour(juce::Colour(amber).withAlpha(0.07f));
+        graphics.fillRect(band);
+        graphics.setColour(juce::Colour(amber));
+        graphics.fillRect(band.withWidth(3.0f));
+        graphics.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+        graphics.drawText("Firm presses and thumps", band.reduced(16.0f, 12.0f).withHeight(22.0f),
+            juce::Justification::centredLeft);
+        warningLayout.draw(graphics, {16.0f, warningY + 46.0f, static_cast<float>(getWidth() - 32),
+            warningLayout.getHeight()});
+    }
+
+private:
+    juce::uint32 accentColour;
+    juce::AttributedString introduction;
+    juce::TextLayout introductionLayout;
+    std::array<juce::AttributedString, 4> steps;
+    std::array<juce::TextLayout, 4> layouts;
+    std::array<float, 4> stepY{};
+    juce::AttributedString warning;
+    juce::TextLayout warningLayout;
+    float warningY{};
+};
+
 class CaptureGuide final : public juce::Component {
 public:
-    explicit CaptureGuide(const juce::String& groupName)
+    CaptureGuide(const juce::String& groupName, juce::uint32 accent)
+        : content(groupName, accent), accentColour(accent)
     {
         setName("Calibrate a key section");
         setWantsKeyboardFocus(true);
         title.setText(getName(), juce::dontSendNotification);
-        title.setFont(juce::FontOptions(18.0f, juce::Font::bold));
+        title.setFont(juce::FontOptions(20.0f, juce::Font::bold));
         title.setColour(juce::Label::textColourId, juce::Colour(textPrimary));
         addAndMakeVisible(title);
-        instructions.setText(
-            "1. Place the bar over one continuous section of " + groupName
-                + " keys.\n\n2. Press the bar down steadily and fully release it each time. Keep the same keys covered each time.\n\n3. Make soft, medium, and firm bar presses. VelCal will watch the weakest covered key and tell you which strength is still needed.\n\n4. Select Finish section when VelCal says the bar section is ready.",
-            juce::dontSendNotification);
-        instructions.setFont(juce::FontOptions(14.0f));
-        instructions.setJustificationType(juce::Justification::topLeft);
-        instructions.setColour(juce::Label::textColourId, juce::Colour(textPrimary));
-        addAndMakeVisible(instructions);
+        viewport.setViewedComponent(&content, false);
+        viewport.setScrollBarsShown(true, false);
+        viewport.setScrollBarThickness(12);
+        viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, juce::Colour(textMuted));
+        addAndMakeVisible(viewport);
         begin.onClick = [this] { exitModalState(1); };
         cancel.onClick = [this] { exitModalState(0); };
         begin.addShortcut(juce::KeyPress(juce::KeyPress::returnKey));
         cancel.addShortcut(juce::KeyPress(juce::KeyPress::escapeKey));
         addAndMakeVisible(begin);
         addAndMakeVisible(cancel);
+        begin.getProperties().set("velcalPrimary", true);
+        begin.setColour(juce::TextButton::buttonColourId, juce::Colour(accentColour).darker(0.55f));
     }
 
     void paint(juce::Graphics& graphics) override
     {
-        graphics.fillAll(juce::Colours::black.withAlpha(0.45f));
+        graphics.fillAll(juce::Colours::black.withAlpha(0.6f));
         graphics.setColour(juce::Colour(panelRaised));
         graphics.fillRoundedRectangle(dialogBounds.toFloat(), 6.0f);
-        graphics.setColour(juce::Colour(textMuted));
+        graphics.setColour(juce::Colour(velcal_ui::border));
         graphics.drawRoundedRectangle(dialogBounds.toFloat(), 6.0f, 1.0f);
+        graphics.drawHorizontalLine(footerY, static_cast<float>(dialogBounds.getX() + 24),
+            static_cast<float>(dialogBounds.getRight() - 24));
+        graphics.setColour(juce::Colour(accentColour));
+        velcal_ui::drawIcon(graphics, velcal_ui::Icon::keyboard,
+            {static_cast<float>(dialogBounds.getX() + 26), static_cast<float>(dialogBounds.getY() + 26), 24.0f, 24.0f});
     }
 
     void resized() override
     {
         dialogBounds = getLocalBounds().withSizeKeepingCentre(
-            juce::jmin(480, getWidth() - 32), juce::jmin(390, getHeight() - 32));
-        auto content = dialogBounds.reduced(24);
-        title.setBounds(content.removeFromTop(30));
-        content.removeFromTop(12);
-        auto buttons = content.removeFromBottom(38);
-        cancel.setBounds(buttons.removeFromRight(88));
+            juce::jmin(680, getWidth() - 48), juce::jmin(660, getHeight() - 48));
+        auto area = dialogBounds.reduced(24);
+        title.setBounds(area.removeFromTop(32).withTrimmedLeft(36));
+        area.removeFromTop(18);
+        auto buttons = area.removeFromBottom(38);
+        begin.setBounds(buttons.removeFromRight(152));
         buttons.removeFromRight(12);
-        begin.setBounds(buttons.removeFromRight(140));
-        content.removeFromBottom(16);
-        instructions.setBounds(content);
+        cancel.setBounds(buttons.removeFromRight(88));
+        footerY = area.getBottom() - 16;
+        area.removeFromBottom(32);
+        viewport.setBounds(area);
+        const auto width = std::max(1, viewport.getWidth() - 16);
+        content.setSize(width, content.prepareLayout(width));
     }
 
 private:
     juce::Rectangle<int> dialogBounds;
     juce::Label title;
-    juce::Label instructions;
+    CaptureGuideContent content;
+    juce::Viewport viewport;
+    juce::uint32 accentColour;
+    int footerY{};
     juce::TextButton begin{"Begin capture"};
     juce::TextButton cancel{"Cancel"};
 };
@@ -447,12 +543,15 @@ MainComponent::MainComponent(PluginState* plugin)
     saveProfileButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff148c74));
     saveProfileButton.setColour(juce::TextButton::textColourOffId, juce::Colour(textPrimary));
     addChildComponent(saveProfileButton);
-    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton}) {
+    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton,
+             &importPresetButton, &exportPresetButton}) {
         button->addListener(this);
         addChildComponent(*button);
     }
     addAndMakeVisible(renamePresetButton);
     addAndMakeVisible(deletePresetButton);
+    addAndMakeVisible(importPresetButton);
+    addAndMakeVisible(exportPresetButton);
     profileMenuButton.setName("Profile actions");
     profileMenuButton.setTooltip("Profile actions");
     profileMenuButton.getProperties().set("velcalIcon", static_cast<int>(velcal_ui::Icon::menu));
@@ -568,6 +667,10 @@ MainComponent::MainComponent(PluginState* plugin)
     resetAllButton.setTooltip("Reset all profile settings");
     renamePresetButton.setTooltip("Rename shared curve preset");
     deletePresetButton.setTooltip("Delete shared curve preset");
+    setIcon(importPresetButton, velcal_ui::Icon::folder);
+    setIcon(exportPresetButton, velcal_ui::Icon::save);
+    importPresetButton.setTooltip("Import a global curve file");
+    exportPresetButton.setTooltip("Export the current global curve to a file");
     for (auto* button : {&captureButton, &saveProfileButton})
         button->getProperties().set("velcalPrimary", true);
     refreshUpdateStatus();
@@ -627,7 +730,8 @@ MainComponent::~MainComponent()
     clearProfileButton.removeListener(this);
     openProfileButton.removeListener(this);
     saveProfileButton.removeListener(this);
-    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton})
+    for (auto* button : {&saveAsProfileButton, &resetAllButton, &renamePresetButton, &deletePresetButton,
+             &importPresetButton, &exportPresetButton})
         button->removeListener(this);
     deleteProfileButton.removeListener(this);
     profileBox.removeListener(this);
@@ -835,18 +939,12 @@ void MainComponent::refreshMidiInputs()
 void MainComponent::refreshMidiOutputs()
 {
     midiOutputBox.clear();
-#if ! JUCE_WINDOWS
-    midiOutputBox.addItem("VelCal Output (virtual)", 1);
-#endif
     midiOutputs = juce::MidiOutput::getAvailableDevices();
     for (int index = 0; index < midiOutputs.size(); ++index)
         midiOutputBox.addItem(midiOutputs[index].name, index + 2);
-#if JUCE_WINDOWS
     midiOutputBox.setTextWhenNothingSelected(
         midiOutputs.isEmpty() ? "No MIDI outputs found" : "Select a MIDI output");
-#else
-    midiOutputBox.setSelectedId(1, juce::dontSendNotification);
-#endif
+    midiOutputBox.setTooltip("Select an existing MIDI output or a virtual cable you have set up");
 }
 
 void MainComponent::loadAppState()
@@ -862,9 +960,8 @@ void MainComponent::loadAppState()
         const auto inputName = juce::String(json.value("midiInputName", ""));
         const auto outputIdentifier = juce::String(json.value("midiOutputIdentifier", ""));
         const auto outputName = juce::String(json.value("midiOutputName", ""));
-        const auto useVirtualOutput = json.value("midiOutputVirtual", true);
         restoreMidiSelections(
-            inputIdentifier, inputName, outputIdentifier, outputName, useVirtualOutput);
+            inputIdentifier, inputName, outputIdentifier, outputName);
 
         const auto lastProfilePath = juce::String(json.value("lastProfilePath", ""));
         const auto lastProfile = lastProfilePath.isEmpty() ? juce::File{}
@@ -890,7 +987,6 @@ void MainComponent::saveAppState() const
         json["midiInputIdentifier"] = midiInputs[inputIndex].identifier.toStdString();
         json["midiInputName"] = midiInputs[inputIndex].name.toStdString();
     }
-    json["midiOutputVirtual"] = midiOutputBox.getSelectedId() == 1;
     if (juce::isPositiveAndBelow(outputIndex, midiOutputs.size())) {
         json["midiOutputIdentifier"] = midiOutputs[outputIndex].identifier.toStdString();
         json["midiOutputName"] = midiOutputs[outputIndex].name.toStdString();
@@ -913,8 +1009,7 @@ void MainComponent::restoreMidiSelections(
     const juce::String& inputIdentifier,
     const juce::String& inputName,
     const juce::String& outputIdentifier,
-    const juce::String& outputName,
-    const bool useVirtualOutput)
+    const juce::String& outputName)
 {
     updatingControls = true;
     auto inputId = 0;
@@ -928,18 +1023,12 @@ void MainComponent::restoreMidiSelections(
     if (inputId != 0)
         midiInputBox.setSelectedId(inputId, juce::dontSendNotification);
 
-    auto outputId = useVirtualOutput ? 1 : 0;
-#if JUCE_WINDOWS
-    if (useVirtualOutput)
-        outputId = 0;
-#endif
-    if (!useVirtualOutput) {
-        for (int index = 0; index < midiOutputs.size(); ++index) {
-            if ((!outputIdentifier.isEmpty() && midiOutputs[index].identifier == outputIdentifier)
-                || (!outputName.isEmpty() && midiOutputs[index].name == outputName)) {
-                outputId = index + 2;
-                break;
-            }
+    auto outputId = 0;
+    for (int index = 0; index < midiOutputs.size(); ++index) {
+        if ((!outputIdentifier.isEmpty() && midiOutputs[index].identifier == outputIdentifier)
+            || (!outputName.isEmpty() && midiOutputs[index].name == outputName)) {
+            outputId = index + 2;
+            break;
         }
     }
     if (outputId != 0)
@@ -1032,14 +1121,14 @@ void MainComponent::comboBoxChanged(juce::ComboBox* comboBox)
         return;
     if (midiEngine.isCapturing()) {
         midiEngine.cancelCapture();
-        updateCaptureControls();
     }
-    if (midiEngine.isRouting()) {
+    if (midiEngine.isRouting() || comboBox == &midiInputBox) {
         routingToggle.setToggleState(false, juce::dontSendNotification);
         midiEngine.stopRouting();
     }
     saveAppState();
     updateLabels();
+    updateCaptureControls();
 }
 
 void MainComponent::buttonClicked(juce::Button* button)
@@ -1079,6 +1168,10 @@ void MainComponent::buttonClicked(juce::Button* button)
         renameCurvePreset();
     else if (button == &deletePresetButton)
         deleteCurvePreset();
+    else if (button == &importPresetButton)
+        importCurvePreset();
+    else if (button == &exportPresetButton)
+        exportCurvePreset();
     else if (button == &resetGlobalButton) {
         if (profile) {
             profile->globalCurve = defaultCurvePresets()[0];
@@ -1120,6 +1213,7 @@ void MainComponent::updateRouting()
     if (!routingToggle.getToggleState()) {
         midiEngine.stopRouting();
         updateLabels();
+        updateMidiMonitoring();
         return;
     }
     const auto inputIndex = midiInputBox.getSelectedId() - 1;
@@ -1130,22 +1224,18 @@ void MainComponent::updateRouting()
     }
 
     juce::String error;
-    const auto createVirtual = midiOutputBox.getSelectedId() == 1;
-    if (!createVirtual && !juce::isPositiveAndBelow(outputIndex, midiOutputs.size())) {
+    if (!juce::isPositiveAndBelow(outputIndex, midiOutputs.size())) {
         routingToggle.setToggleState(false, juce::dontSendNotification);
         juce::AlertWindow::showMessageBoxAsync(
             juce::MessageBoxIconType::WarningIcon,
             "Select a MIDI output",
-            "Select a MIDI output before enabling routing.");
+            "Set up a virtual MIDI cable or select an existing MIDI output before enabling routing.");
         return;
     }
-    const auto outputIdentifier = juce::isPositiveAndBelow(outputIndex, midiOutputs.size())
-        ? midiOutputs[outputIndex].identifier
-        : juce::String{};
+    const auto outputIdentifier = midiOutputs[outputIndex].identifier;
     if (!midiEngine.startRouting(
             midiInputs[inputIndex].identifier,
             outputIdentifier,
-            createVirtual,
             error)) {
         routingToggle.setToggleState(false, juce::dontSendNotification);
         juce::AlertWindow::showMessageBoxAsync(
@@ -1154,6 +1244,19 @@ void MainComponent::updateRouting()
             error);
     }
     updateLabels();
+    updateMidiMonitoring();
+}
+
+void MainComponent::updateMidiMonitoring()
+{
+    if (pluginState || midiEngine.isCapturing() || midiEngine.isRouting() || midiEngine.isListening())
+        return;
+    const auto index = midiInputBox.getSelectedId() - 1;
+    if (!juce::isPositiveAndBelow(index, midiInputs.size()))
+        return;
+    juce::String error;
+    if (!midiEngine.startMonitoring(midiInputs[index].identifier, error))
+        statusLabel.setText(error, juce::dontSendNotification);
 }
 
 void MainComponent::updateCapture()
@@ -1196,7 +1299,7 @@ void MainComponent::showCaptureGuide()
     if (captureGuide)
         return;
     const auto groupName = keyGroupBox.getSelectedId() == 2 ? "black" : "white";
-    captureGuide = std::make_unique<CaptureGuide>(groupName);
+    captureGuide = std::make_unique<CaptureGuide>(groupName, green);
     captureGuide->setBounds(getLocalBounds());
     addAndMakeVisible(*captureGuide);
     captureGuide->toFront(false);
@@ -1319,6 +1422,8 @@ void MainComponent::updateCaptureControls()
     saveAsProfileButton.setEnabled(profile.has_value() && !capturing);
     clearProfileButton.setEnabled(profile.has_value() && !capturing);
     resetAllButton.setEnabled(profile.has_value() && !capturing);
+    if (!capturing)
+        updateMidiMonitoring();
 }
 
 void MainComponent::timerCallback()
@@ -1332,6 +1437,7 @@ void MainComponent::timerCallback()
     if (pluginState)
         syncPluginState();
     const auto activity = midiEngine.getActivity();
+    followPlayedNote(activity.playedNoteEvent);
     if (activity.outputError.isNotEmpty()) {
         midiEngine.stopRouting();
         updateCaptureControls();
@@ -1822,17 +1928,18 @@ void MainComponent::setActiveTab(const bool globalCurveTab, const bool remember)
              &clearProfileButton, &keyAdjustmentLabel, &keyAdjustmentSlider, &resetKeyButton})
         component->setVisible(!globalCurveTab);
     keyboardScrollBar.setVisible(!globalCurveTab);
-    for (auto* component : std::array<juce::Component*, 12>{
+    for (auto* component : std::array<juce::Component*, 14>{
              &presetLabel, &globalPresetBox, &curvatureLabel, &curvatureSlider,
              &minimumVelocityLabel, &minimumVelocitySlider, &maximumVelocityLabel,
              &maximumVelocitySlider, &savePresetButton, &resetGlobalButton,
-             &renamePresetButton, &deletePresetButton})
+             &renamePresetButton, &deletePresetButton, &importPresetButton, &exportPresetButton})
         component->setVisible(globalCurveTab);
 
     refreshCurvePresets();
     updateEditingControls();
     updateLabels();
     resized();
+    revealSelectedNote();
     repaint();
     if (remember) {
         if (pluginState)
@@ -1975,6 +2082,7 @@ void MainComponent::storeCurvePreset(velcal::VelocityCurveSettings preset, bool 
         CurvePresetLibrary::save(preset, replace);
         profile->globalCurve = std::move(preset);
         markProfileDirty();
+        updateEffectiveMaps();
         reloadCurvePresets();
         refreshCurvePresets();
         updateEditingControls();
@@ -1994,13 +2102,153 @@ void MainComponent::reloadCurvePresets()
     if (contents == curveLibraryContents)
         return;
     try {
-        auto presets = CurvePresetLibrary::load();
+        auto presets = CurvePresetLibrary::loadWithIndividualFiles();
         sharedCurvePresets = std::move(presets);
         curveLibraryContents = contents;
         refreshCurvePresets();
     } catch (const std::exception&) {
         statusLabel.setText("Could not read curve preset library", juce::dontSendNotification);
     }
+}
+
+void MainComponent::importCurvePreset()
+{
+    if (!profile || fileChooser || discardPromptOpen)
+        return;
+    const auto revision = profileRevision;
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Import global curve", CurvePresetLibrary::directory(), "*.velcal-curve.json");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+        [safeThis = juce::Component::SafePointer<MainComponent>(this), revision](const juce::FileChooser& chooser) {
+            const auto file = chooser.getResult();
+            if (safeThis == nullptr)
+                return;
+            safeThis->fileChooser.reset();
+            if (file.existsAsFile())
+                safeThis->importCurvePresetFile(file, revision);
+        });
+}
+
+void MainComponent::importCurvePresetFile(const juce::File& file, std::uint64_t revision)
+{
+    if (pluginState)
+        syncPluginState();
+    if (!profile || revision != profileRevision)
+        return;
+    try {
+        const auto preset = CurvePresetLibrary::readCurveFile(file);
+        for (const auto& builtin : defaultCurvePresets())
+            if (CurvePresetLibrary::sameName(builtin.name, preset.name))
+                throw std::runtime_error("the imported curve uses a reserved built-in preset name");
+        const auto presets = CurvePresetLibrary::load();
+        const auto exists = std::any_of(presets.begin(), presets.end(), [&](const auto& saved) {
+            return CurvePresetLibrary::sameName(saved.name, preset.name);
+        });
+        if (!exists) {
+            storeCurvePreset(preset, false, revision);
+            return;
+        }
+        const juce::Component::SafePointer<MainComponent> safeThis(this);
+        juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+            "Replace curve preset?", "Replace \"" + juce::String(preset.name) + "\" in the shared library?",
+            "Replace", "Cancel", this,
+            juce::ModalCallbackFunction::create([safeThis, preset, revision](int answer) {
+                if (answer != 0 && safeThis != nullptr)
+                    safeThis->storeCurvePreset(preset, true, revision);
+            }));
+    } catch (const std::exception& error) {
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Could not import global curve", error.what(), "OK", this,
+            juce::ModalCallbackFunction::create([](int) {}));
+    }
+}
+
+void MainComponent::exportCurvePreset()
+{
+    if (!profile || fileChooser || discardPromptOpen)
+        return;
+    auto curve = profile->globalCurve;
+    for (const auto& builtin : defaultCurvePresets())
+        if (CurvePresetLibrary::sameName(builtin.name, curve.name))
+            curve.name += " copy";
+    const auto name = juce::File::createLegalFileName(juce::String(curve.name));
+    fileChooser = std::make_unique<juce::FileChooser>("Export global curve",
+        CurvePresetLibrary::directory().getChildFile(name + ".velcal-curve.json"), "*.velcal-curve.json");
+    fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+        [safeThis = juce::Component::SafePointer<MainComponent>(this), curve](const juce::FileChooser& chooser) {
+            auto file = chooser.getResult();
+            if (safeThis == nullptr)
+                return;
+            safeThis->fileChooser.reset();
+            if (file == juce::File{})
+                return;
+            if (!file.getFileName().endsWithIgnoreCase(".velcal-curve.json"))
+                file = file.getSiblingFile(file.getFileName() + ".velcal-curve.json");
+            const auto write = [safeThis, curve, file] {
+                if (safeThis == nullptr)
+                    return;
+                try {
+                    CurvePresetLibrary::writeCurveFile(file, curve);
+                    safeThis->statusLabel.setText("Global curve exported", juce::dontSendNotification);
+                } catch (const std::exception& error) {
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                        "Could not export global curve", error.what(), "OK", safeThis,
+                        juce::ModalCallbackFunction::create([](int) {}));
+                }
+            };
+            if (file.exists()) {
+                juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+                    "Replace global curve file?", "Replace \"" + file.getFileName() + "\"?",
+                    "Replace", "Cancel", safeThis,
+                    juce::ModalCallbackFunction::create([write](int answer) {
+                        if (answer != 0)
+                            write();
+                    }));
+            } else {
+                write();
+            }
+        });
+}
+
+void MainComponent::followPlayedNote(std::uint64_t event)
+{
+    if (event != 0 && event != lastVelocityEvent) {
+        lastVelocityEvent = event;
+        lastNoteVelocityEvents[static_cast<std::size_t>(event & 0x7f)] = event;
+        repaint();
+    }
+    if (event == 0 || event == lastPlayedNoteEvent || activeCurvePoint
+        || keyAdjustmentSlider.isMouseButtonDown(true))
+        return;
+    lastPlayedNoteEvent = event;
+    selectedNote = static_cast<std::uint8_t>(event & 0x7f);
+    revealSelectedNote();
+    updateEditingControls();
+    if (!midiEngine.isCapturing())
+        updateLabels();
+    repaint();
+}
+
+void MainComponent::revealSelectedNote()
+{
+    if (showingGlobalCurve || keyboardKeyBounds.isEmpty()
+        || selectedNote < firstPianoNote || selectedNote > lastPianoNote)
+        return;
+    int whiteIndex = 0;
+    for (int note = firstPianoNote; note < selectedNote; ++note)
+        if (!velcal::isBlackKey(static_cast<std::uint8_t>(note)))
+            ++whiteIndex;
+    const auto width = std::max(keyboardKeyBounds.getWidth(), minimumWhiteKeyWidth * pianoWhiteKeyCount)
+        / pianoWhiteKeyCount;
+    const auto black = velcal::isBlackKey(selectedNote);
+    const auto left = whiteIndex * width - (black ? width * 0.31f : 0.0f);
+    const auto right = left + width * (black ? 0.62f : 1.0f);
+    const auto start = keyboardScrollBar.getCurrentRangeStart();
+    const auto visible = keyboardScrollBar.getCurrentRangeSize();
+    if (left < start)
+        keyboardScrollBar.setCurrentRangeStart(left, juce::dontSendNotification);
+    else if (right > start + visible)
+        keyboardScrollBar.setCurrentRangeStart(right - visible, juce::dontSendNotification);
 }
 
 void MainComponent::renameCurvePreset()
@@ -2165,7 +2413,7 @@ juce::Rectangle<float> MainComponent::curvePlotBounds() const
     return curveBounds
         .withTrimmedLeft(58.0f)
         .withTrimmedRight(28.0f)
-        .withTrimmedTop(58.0f)
+        .withTrimmedTop(76.0f)
         .withTrimmedBottom(48.0f);
 }
 
@@ -2278,7 +2526,7 @@ void MainComponent::updateEffectiveMaps()
     if (pluginState)
         publishPluginState();
     else
-        midiEngine.setMaps(velcal::effectiveMaps(*profile));
+        midiEngine.setMaps(velcal::effectiveMaps(*profile), velcal::perKeyMaps(*profile));
 }
 
 juce::File MainComponent::profileDirectory() const
@@ -2342,6 +2590,8 @@ void MainComponent::updateEditingControls()
     minimumVelocitySlider.setEnabled(enabled);
     maximumVelocitySlider.setEnabled(enabled);
     savePresetButton.setEnabled(enabled);
+    importPresetButton.setEnabled(enabled);
+    exportPresetButton.setEnabled(enabled);
     resetGlobalButton.setEnabled(enabled);
     smoothCurveToggle.setEnabled(enabled);
     if (profile) {
@@ -2371,7 +2621,9 @@ void MainComponent::updateLabels()
         profileBox.setText(profileFiles.isEmpty() ? "No saved profiles" : "No profile loaded",
             juce::dontSendNotification);
         selectedNoteLabel.setText(
-            showingGlobalCurve ? "Global velocity curve" : "No calibrated note",
+            showingGlobalCurve ? "Global velocity curve"
+                : lastPlayedNoteEvent != 0 ? midiNoteName(selectedNote) + "  |  No profile"
+                : "No calibrated note",
             juce::dontSendNotification);
         statusLabel.setText("", juce::dontSendNotification);
         saveProfileButton.setEnabled(false);
@@ -2475,6 +2727,11 @@ void MainComponent::resized()
     renamePresetButton.setBounds(presetActions.removeFromLeft(104));
     presetActions.removeFromLeft(8);
     deletePresetButton.setBounds(presetActions);
+    globalSidebar.removeFromTop(8);
+    auto transferActions = globalSidebar.removeFromTop(34);
+    importPresetButton.setBounds(transferActions.removeFromLeft(104));
+    transferActions.removeFromLeft(8);
+    exportPresetButton.setBounds(transferActions);
 
     area.removeFromLeft(28);
     auto selectedHeader = area.removeFromTop(44);
@@ -2541,9 +2798,11 @@ void MainComponent::paint(juce::Graphics& graphics)
     graphics.drawHorizontalLine(94, 301.0f, static_cast<float>(getWidth() - 28));
 
     if (!profile) {
+        if (!showingGlobalCurve)
+            paintKeyboard(graphics, keyboardBounds);
         graphics.setColour(juce::Colour(textMuted));
         graphics.setFont(16.0f);
-        graphics.drawText("Open a calibration profile", getLocalBounds().reduced(300),
+        graphics.drawText("Open a calibration profile", curveBounds,
             juce::Justification::centred);
         return;
     }
@@ -2629,6 +2888,7 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
         - static_cast<float>(keyboardScrollBar.getCurrentRangeStart());
     graphics.saveState();
     graphics.reduceClipRegion(keyboardKeyBounds.toNearestInt());
+    const velcal::NoteCalibrationStats emptyStats;
     int whiteIndex = 0;
     for (int note = firstPianoNote; note <= lastPianoNote; ++note) {
         if (velcal::isBlackKey(static_cast<std::uint8_t>(note)))
@@ -2636,13 +2896,13 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
         auto key = juce::Rectangle<float>(
             originX + whiteIndex * whiteWidth,
             keyboardKeyBounds.getY(), whiteWidth, keyboardKeyBounds.getHeight());
-        const auto& stats = profile->generated.noteStats[static_cast<std::size_t>(note)];
+        const auto& stats = profile ? profile->generated.noteStats[static_cast<std::size_t>(note)] : emptyStats;
         graphics.setGradientFill(juce::ColourGradient(juce::Colour(0xfff8fafb), key.getTopLeft(),
             juce::Colour(0xffd6dfe3), key.getBottomLeft(), false));
         graphics.fillRect(key);
         graphics.setColour(juce::Colour(0xffaab0b2));
         graphics.drawRect(key, 1.0f);
-        if (stats.samplesSeen != 0) {
+        if (profile && stats.samplesSeen != 0) {
             const auto statusColour = !hasCompleteRegionalCoverage(
                                           stats, profile->settings.desiredSamplesPerRegion)
                 ? juce::Colour(amber)
@@ -2668,11 +2928,11 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
         const auto key = juce::Rectangle<float>(
             originX + whiteIndex * whiteWidth - blackWidth * 0.5f,
             keyboardKeyBounds.getY(), blackWidth, keyboardKeyBounds.getHeight() * 0.64f);
-        const auto& stats = profile->generated.noteStats[static_cast<std::size_t>(note)];
+        const auto& stats = profile ? profile->generated.noteStats[static_cast<std::size_t>(note)] : emptyStats;
         graphics.setGradientFill(juce::ColourGradient(juce::Colour(0xff11181d), key.getTopLeft(),
             juce::Colour(0xff35434b), key.getBottomLeft(), false));
         graphics.fillRoundedRectangle(key, 1.5f);
-        if (stats.samplesSeen != 0) {
+        if (profile && stats.samplesSeen != 0) {
             const auto statusColour = !hasCompleteRegionalCoverage(
                                           stats, profile->settings.desiredSamplesPerRegion)
                 ? juce::Colour(amber)
@@ -2710,6 +2970,48 @@ void MainComponent::paintKeyboard(juce::Graphics& graphics, const juce::Rectangl
         graphics.setFont(11.0f);
         graphics.drawText(item.second, itemBounds, juce::Justification::centredLeft);
     }
+}
+
+std::optional<MainComponent::PlayedVelocity> MainComponent::displayedPlayedVelocity() const
+{
+    const auto event = showingGlobalCurve ? lastVelocityEvent : lastNoteVelocityEvents[selectedNote];
+    if (event == 0)
+        return std::nullopt;
+    return PlayedVelocity{
+        static_cast<std::uint8_t>(event & 0x7f),
+        static_cast<std::uint8_t>((event >> (showingGlobalCurve ? 16 : 8)) & 0x7f),
+        static_cast<std::uint8_t>((event >> (showingGlobalCurve ? 24 : 16)) & 0x7f),
+        static_cast<std::uint8_t>((event >> 24) & 0x7f)};
+}
+
+void MainComponent::paintPlayedVelocity(juce::Graphics& graphics,
+    juce::Rectangle<float> bounds, juce::Rectangle<float> plot)
+{
+    const auto played = displayedPlayedVelocity();
+    auto text = juce::String("Input --  ->  Output --");
+    if (played) {
+        text = midiNoteName(played->note) + "  |  Input " + juce::String(played->input)
+            + " -> Output " + juce::String(played->output);
+        if (!showingGlobalCurve)
+            text += "  |  MIDI " + juce::String(played->midiOutput);
+    }
+    graphics.setColour(juce::Colour(played ? textPrimary : textMuted));
+    graphics.setFont(13.0f);
+    graphics.drawText(text, bounds.withTrimmedLeft(48.0f).withTrimmedRight(16.0f)
+        .withY(bounds.getY() + 40.0f).withHeight(22.0f), juce::Justification::centredLeft);
+    if (!played || plot.isEmpty())
+        return;
+    const auto x = plot.getX() + (played->input - 1.0f) / 126.0f * plot.getWidth();
+    const auto y = plot.getBottom() - (played->output - 1.0f) / 126.0f * plot.getHeight();
+    graphics.setColour(juce::Colour(cyan).withAlpha(0.5f));
+    graphics.drawLine(x, plot.getBottom(), x, y, 1.0f);
+    graphics.drawLine(plot.getX(), y, x, y, 1.0f);
+    graphics.setColour(juce::Colour(background));
+    graphics.fillEllipse(x - 7.0f, y - 7.0f, 14.0f, 14.0f);
+    graphics.setColour(juce::Colour(cyan));
+    graphics.drawEllipse(x - 7.0f, y - 7.0f, 14.0f, 14.0f, 2.0f);
+    graphics.setColour(juce::Colour(textPrimary));
+    graphics.fillEllipse(x - 2.5f, y - 2.5f, 5.0f, 5.0f);
 }
 
 void MainComponent::paintCurve(juce::Graphics& graphics, const juce::Rectangle<float> bounds)
@@ -2757,6 +3059,7 @@ void MainComponent::paintCurve(juce::Graphics& graphics, const juce::Rectangle<f
     paintCurveFill(graphics, curve, plot, green);
     graphics.setColour(juce::Colour(green));
     graphics.strokePath(curve, juce::PathStrokeType(2.5f));
+    paintPlayedVelocity(graphics, bounds, plot);
     paintCurveHandles(
         graphics,
         plot,
@@ -2797,6 +3100,7 @@ void MainComponent::paintGlobalCurve(
     paintCurveFill(graphics, curve, plot, green);
     graphics.setColour(juce::Colour(green));
     graphics.strokePath(curve, juce::PathStrokeType(3.0f));
+    paintPlayedVelocity(graphics, bounds, plot);
     paintCurveHandles(
         graphics,
         plot,

@@ -51,6 +51,7 @@ std::string serializeProfile(const CalibrationProfile& profile);
 CalibrationProfile deserializeProfile(const std::string& data);
 std::string serializeCurvePresets(const std::vector<VelocityCurveSettings>& presets);
 std::vector<VelocityCurveSettings> deserializeCurvePresets(const std::string& data);
+std::array<VelocityMap, 128> perKeyMaps(const CalibrationProfile& profile);
 std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile);
 
 } // namespace velcal

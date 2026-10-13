@@ -53,11 +53,11 @@ private:
         const juce::String& inputIdentifier,
         const juce::String& inputName,
         const juce::String& outputIdentifier,
-        const juce::String& outputName,
-        bool useVirtualOutput);
+        const juce::String& outputName);
     void refreshProfileList();
     void selectProfileInList(const juce::File& file);
     void updateRouting();
+    void updateMidiMonitoring();
     void updateCapture();
     void showCaptureGuide();
     void beginSectionCapture();
@@ -84,10 +84,15 @@ private:
     void refreshCurvePresets();
     void applySelectedCurvePreset();
     void saveCurvePreset();
+    void importCurvePreset();
+    void exportCurvePreset();
+    void importCurvePresetFile(const juce::File& file, std::uint64_t revision);
     void renameCurvePreset();
     void deleteCurvePreset();
     void storeCurvePreset(velcal::VelocityCurveSettings preset, bool replace, std::uint64_t revision);
     void reloadCurvePresets();
+    void followPlayedNote(std::uint64_t event);
+    void revealSelectedNote();
     void updateEffectiveMaps();
     void publishPluginState() const;
     void syncPluginState();
@@ -103,6 +108,15 @@ private:
         juce::Graphics& graphics,
         juce::Rectangle<float> plot,
         const std::vector<velcal::VelocityCurvePoint>& points);
+    struct PlayedVelocity {
+        std::uint8_t note{};
+        std::uint8_t input{};
+        std::uint8_t output{};
+        std::uint8_t midiOutput{};
+    };
+    std::optional<PlayedVelocity> displayedPlayedVelocity() const;
+    void paintPlayedVelocity(juce::Graphics& graphics, juce::Rectangle<float> bounds,
+        juce::Rectangle<float> plot);
     void updateLabels();
     void paintKeyboard(juce::Graphics& graphics, juce::Rectangle<float> bounds);
     void paintCurve(juce::Graphics& graphics, juce::Rectangle<float> bounds);
@@ -152,6 +166,8 @@ private:
     juce::TextButton savePresetButton{"Save preset"};
     juce::TextButton renamePresetButton{"Rename"};
     juce::TextButton deletePresetButton{"Delete"};
+    juce::TextButton importPresetButton{"Import"};
+    juce::TextButton exportPresetButton{"Export"};
     juce::TextButton resetGlobalButton{"Reset curve"};
     juce::ToggleButton smoothCurveToggle{"Smooth"};
     juce::ScrollBar keyboardScrollBar{false};
@@ -178,6 +194,9 @@ private:
     juce::File profileFile;
     std::uint64_t captureStartMessageCount{};
     std::uint8_t selectedNote{60};
+    std::uint64_t lastPlayedNoteEvent{};
+    std::uint64_t lastVelocityEvent{};
+    std::array<std::uint64_t, 128> lastNoteVelocityEvents{};
     bool showingGlobalCurve{};
     bool updatingControls{};
     bool updatingProfileList{};

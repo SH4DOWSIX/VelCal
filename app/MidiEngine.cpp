@@ -38,36 +38,41 @@ struct MidiEngine::OutputSession {
 MidiEngine::MidiEngine(OutputFactory factory) : outputFactory(std::move(factory))
 {
     if (!outputFactory) {
-        outputFactory = [](const juce::String& identifier, const bool createVirtual)
+        outputFactory = [](const juce::String& identifier)
             -> std::unique_ptr<OutputDevice> {
-            auto device = createVirtual ? juce::MidiOutput::createNewDevice("VelCal Output")
-                                        : juce::MidiOutput::openDevice(identifier);
+            auto device = juce::MidiOutput::openDevice(identifier);
             if (!device)
                 return {};
             return std::make_unique<JuceOutput>(std::move(device));
         };
     }
-    auto identity = std::make_shared<MapBank>();
-    for (auto& map : *identity)
+    auto identity = std::make_shared<Mapping>();
+    for (auto& map : identity->output)
         map = velcal::VelocityMap::identity();
-    std::atomic_store(&maps, std::shared_ptr<const MapBank>(std::move(identity)));
+    identity->perKey = identity->output;
+    std::atomic_store(&maps, std::shared_ptr<const Mapping>(std::move(identity)));
 }
 
 MidiEngine::~MidiEngine() { stopRouting(); }
 
 void MidiEngine::setMaps(const MapBank& newMaps)
 {
+    setMaps(newMaps, newMaps);
+}
+
+void MidiEngine::setMaps(const MapBank& newMaps, const MapBank& perKey)
+{
     if (hostMode) {
         const juce::SpinLock::ScopedLockType lock(hostMapLock);
-        hostPublishedMaps = newMaps;
+        hostPublishedMaps = {newMaps, perKey};
         return;
     }
     std::atomic_store(&maps,
-        std::shared_ptr<const MapBank>(std::make_shared<MapBank>(newMaps)));
+        std::shared_ptr<const Mapping>(std::make_shared<Mapping>(Mapping{newMaps, perKey})));
 }
 
 bool MidiEngine::startOutput(
-    const juce::String& identifier, const bool createVirtual, juce::String& error)
+    const juce::String& identifier, juce::String& error)
 {
     if (stalledOutput) {
         const std::scoped_lock lock(stalledOutput->mutex);
@@ -81,15 +86,15 @@ bool MidiEngine::startOutput(
     messagesInRateWindow = 0;
     auto session = std::make_shared<OutputSession>();
     std::atomic_store(&outputSession, session);
-    outputWorker = std::thread([session, factory = outputFactory, identifier, createVirtual] {
-        outputWorkerLoop(session, factory, identifier, createVirtual);
+    outputWorker = std::thread([session, factory = outputFactory, identifier] {
+        outputWorkerLoop(session, factory, identifier);
     });
     return true;
 }
 
 bool MidiEngine::startRouting(
     const juce::String& inputIdentifier, const juce::String& outputIdentifier,
-    const bool createVirtualOutput, juce::String& error)
+    juce::String& error)
 {
     stopRouting();
     auto openedInput = juce::MidiInput::openDevice(inputIdentifier, this);
@@ -97,7 +102,7 @@ bool MidiEngine::startRouting(
         error = "The selected MIDI input could not be opened. Close other software that may have exclusive access to it.";
         return false;
     }
-    if (!startOutput(outputIdentifier, createVirtualOutput, error))
+    if (!startOutput(outputIdentifier, error))
         return false;
     input = std::move(openedInput);
     input->start();
@@ -126,6 +131,18 @@ bool MidiEngine::startCapture(const juce::String& inputIdentifier, juce::String&
     }
     input = std::move(openedInput);
     capturing.store(true, std::memory_order_release);
+    input->start();
+    return true;
+}
+
+bool MidiEngine::startMonitoring(const juce::String& inputIdentifier, juce::String& error)
+{
+    stopRouting();
+    input = juce::MidiInput::openDevice(inputIdentifier, this);
+    if (!input) {
+        error = "The selected MIDI input could not be opened. Close other software that may have exclusive access to it.";
+        return false;
+    }
     input->start();
     return true;
 }
@@ -212,7 +229,8 @@ MidiEngine::Activity MidiEngine::getActivity() const
         lastNote.load(std::memory_order_relaxed),
         lastRawVelocity.load(std::memory_order_relaxed),
         lastCorrectedVelocity.load(std::memory_order_relaxed),
-        false, messagesDropped.load(std::memory_order_relaxed), false, {}};
+        false, messagesDropped.load(std::memory_order_relaxed), false, {},
+        playedNoteEvent.load(std::memory_order_relaxed)};
     if (hostMode) {
         const auto overflow = hostCaptureOverflow.load(std::memory_order_acquire);
         if (overflow != 0 && overflow == hostCaptureGeneration.load(std::memory_order_acquire))
@@ -243,8 +261,9 @@ void MidiEngine::enableHostMode()
 {
     hostCaptureEvents.resize(hostCaptureCapacity);
     hostMode = true;
-    for (auto& map : hostPublishedMaps)
+    for (auto& map : hostPublishedMaps.output)
         map = velcal::VelocityMap::identity();
+    hostPublishedMaps.perKey = hostPublishedMaps.output;
     hostAudioMaps = hostPublishedMaps;
 }
 
@@ -298,12 +317,13 @@ void MidiEngine::processHostMidi(juce::MidiBuffer& midi, double sampleRate, int 
                         hostCaptureOverflow.store(generation + 1, std::memory_order_release);
                 }
             }
-            const auto corrected = hostAudioMaps[note].apply(raw);
+            const auto corrected = hostAudioMaps.output[note].apply(raw);
             // MidiBuffer owns these bytes; changing velocity preserves all event offsets and ordering.
             const_cast<juce::uint8*>(metadata.data)[2] = corrected;
             lastNote.store(note, std::memory_order_relaxed);
             lastRawVelocity.store(raw, std::memory_order_relaxed);
             lastCorrectedVelocity.store(corrected, std::memory_order_relaxed);
+            recordPlayedNote(note, raw, hostAudioMaps.perKey[note].apply(raw), corrected);
         }
         messagesSent.fetch_add(1, std::memory_order_relaxed);
     }
@@ -325,7 +345,7 @@ void MidiEngine::tripRoutingSafety()
 
 void MidiEngine::outputWorkerLoop(
     const std::shared_ptr<OutputSession>& session, const OutputFactory& factory,
-    const juce::String& identifier, const bool createVirtual)
+    const juce::String& identifier)
 {
     const auto beginOperation = [&session] {
         session->operationStartedMs.store(juce::Time::getMillisecondCounter(), std::memory_order_relaxed);
@@ -334,7 +354,7 @@ void MidiEngine::outputWorkerLoop(
     std::unique_ptr<OutputDevice> output;
     try {
         beginOperation();
-        output = factory(identifier, createVirtual);
+        output = factory(identifier);
         session->operationInProgress.store(false, std::memory_order_release);
         if (!output) {
             const std::scoped_lock lock(session->mutex);
@@ -426,12 +446,13 @@ void MidiEngine::handleIncomingMidiMessage(juce::MidiInput*, const juce::MidiMes
             capturedEvents.push_back({note, rawVelocity, timestampUs});
         }
         const auto currentMaps = std::atomic_load(&maps);
-        const auto correctedVelocity = currentMaps->at(note).apply(rawVelocity);
+        const auto correctedVelocity = currentMaps->output.at(note).apply(rawVelocity);
         outgoing = juce::MidiMessage::noteOn(message.getChannel(), static_cast<int>(note), correctedVelocity);
         outgoing.setTimeStamp(message.getTimeStamp());
         lastNote.store(note, std::memory_order_relaxed);
         lastRawVelocity.store(rawVelocity, std::memory_order_relaxed);
         lastCorrectedVelocity.store(correctedVelocity, std::memory_order_relaxed);
+        recordPlayedNote(note, rawVelocity, currentMaps->perKey.at(note).apply(rawVelocity), correctedVelocity);
     }
     if (routing) {
         bool overflow = false;
@@ -448,4 +469,12 @@ void MidiEngine::handleIncomingMidiMessage(juce::MidiInput*, const juce::MidiMes
         else
             session->ready.notify_one();
     }
+}
+
+void MidiEngine::recordPlayedNote(std::uint8_t note, std::uint8_t raw,
+    std::uint8_t perKey, std::uint8_t output) noexcept
+{
+    const auto sequence = (playedNoteEvent.load(std::memory_order_relaxed) >> 32) + 1;
+    playedNoteEvent.store((sequence << 32) | note | (std::uint64_t{raw} << 8)
+        | (std::uint64_t{perKey} << 16) | (std::uint64_t{output} << 24), std::memory_order_relaxed);
 }

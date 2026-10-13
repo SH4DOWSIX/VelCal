@@ -8,7 +8,7 @@ physical MIDI input
   -> immutable per-note velocity lookup tables
   -> per-key manual adjustment
   -> global velocity curve
-  -> existing MIDI output (Windows) or application-owned virtual output (macOS/Linux)
+  -> existing MIDI output (including a user-configured virtual MIDI cable)
   -> DAW or instrument
 ```
 
@@ -109,3 +109,37 @@ changes alongside appearance preferences. Library changes never republish
 profile or host state: applying a preset copies its settings into the profile.
 Legacy profile-local presets remain embedded and can be copied into the library
 through Save Preset. The shared library itself is not embedded in DAW state.
+
+Every named shared curve also has a single-curve `.velcal-curve.json` file in
+the profile directory's `curves` subfolder. The original library remains the
+authoritative index for compatibility; loading it creates missing individual
+copies. Library saves/replacements refresh those copies, and rename/delete
+remove the former managed file. Filenames combine a sanitized, bounded name
+with a case-insensitive name hash. Copies and the index use temporary-file
+replacement under the same process lock. Import/Export use the existing
+version-1 preset envelope with exactly one curve, including points, smoothing,
+curvature and output limits. Import validates before adding/applying and guards
+against a changed editor/host revision; duplicate names require confirmation.
+Use Import for shared files rather than editing the managed copies in place.
+
+Standalone opens only existing output endpoints and listens to the selected
+input while routing is off. It resumes input monitoring after capture ends.
+Both standalone callbacks and host processing publish a packed note-on sequence
+and note number through one atomic value. The editor consumes it on its timer,
+updates selection and scroll position, and leaves profile/host data untouched.
+Note-off/controller events do not change it. Following pauses during curve-point
+or per-key trim dragging, and MIDI input never switches the selected tab. The
+keyboard can display played-note selection before a calibration profile is loaded.
+
+The last-strike snapshot also packs raw, per-key (including trim), and final
+velocity into the same atomic value as the note and event sequence. `perKeyMaps`
+exposes the existing stage before global correction; `effectiveMaps` composes
+that stage with the global curve. The engine publishes both banks together,
+including the host's nonblocking audio-thread snapshot, so readouts use the
+maps that processed the event rather than recalculating from subsequent edits.
+The editor retains transient strikes by MIDI note and the latest global strike.
+Both graphs reserve a readout row above the plot and show a cyan marker with
+horizontal/vertical guides. Per-key coordinates are raw -> per-key velocity,
+with final MIDI velocity also listed. Global coordinates are per-key -> final
+velocity. Releases and controllers leave the display intact. Strike history
+is display-only and is not saved to profiles or DAW state.

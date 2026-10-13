@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(VelCal VERSION 0.0.4 LANGUAGES C CXX)
+project(VelCal VERSION 0.0.5 LANGUAGES C CXX)
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/velcal-version.txt" CONTENT "${PROJECT_VERSION}\n")
 
 option(VELCAL_BUILD_TESTS "Build the VelCal core tests" ON)

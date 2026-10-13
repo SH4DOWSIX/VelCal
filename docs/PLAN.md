@@ -27,7 +27,7 @@ physical keyboard
   -> automatic per-key calibration map OR that key's manual curve override
   -> optional per-key trim
   -> global velocity curve
-  -> virtual/existing MIDI output
+  -> existing MIDI output (including a user-configured virtual MIDI cable)
   -> DAW or software instrument
 ```
 
@@ -52,6 +52,99 @@ build outputs to `C:`. The drive is nearly full.
 See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
+
+0.0.5 source push and all-platform builds authorized (2026-10-13): the user
+requested the version bump, pushing all changes from this session and starting
+fresh Windows x64, Linux x64 and universal macOS installer jobs. Version follows
+PROJECT_VERSION in CMake. Prepared `docs/releases/0.0.5.md` with feature changes,
+compatibility and explicit hardware-testing limitations. Remote main was fetched
+and matched the local branch; its only workflow is manual-only. Review/stage
+source, tests and docs only, excluding builds, dependencies, caches, profiles
+and captures. Dispatch platform=all after pushing. Do not poll: wait for the
+user's completion notice before checking results. Release publication is a
+later step; no tag or release is authorized by this build request. No local
+build requested. The newest marker/popup changes remain runtime-unverified.
+
+Calibration expectations (2026-10-13, source-only): added the user's approved
+"What calibration does" and "What it won't do" explanation above the popup's
+numbered steps and at the start of README calibration guidance. Describes more
+even per-key response while preserving playing dynamics, without changing
+physical feel or repairing mechanical faults. The existing scrollable popup
+body lays out this introduction by measured text height; buttons stay fixed.
+No new disclaimer, calibration behavior change, build, test execution or GitHub
+update. Source and whitespace checks only; runtime layout remains for the user.
+
+Calibration guide revision (2026-10-13, source-only): replaced the basic Start
+section popup with the user-approved concise four-step instructions and a
+separate highlighted Firm/thump explanation. Clarifies the object's overall
+length (no longer than 50 cm), short sections, front-end placement, central
+force, consistent position, full release, live guidance, overlap and saving.
+The warning recommends shorter objects and manual per-key curves when Firm
+requires uncomfortable force or impacts. The modal uses numbered steps,
+formatted emphasis, the user's accent, a fixed action footer and a scrolling
+body for smaller windows. Begin/Cancel and capture behavior remain unchanged.
+README now carries the same length and manual-fallback wording, fixed placement
+within a capture, and the two-key overlap recommendation for black keys too.
+Source/API/whitespace checks only; no build, runtime visual validation, test
+execution or GitHub update. Verify white/black guidance and smaller-window
+scrolling in the next user-run build.
+
+Last-strike velocity display (2026-10-13, source-only): the user reports the
+previous routing/preset/key-selection changes appear to work; no detailed build
+or test log supplied. Added a persistent cyan marker, axis guides and numeric
+readout to both per-key and global graphs. Per-key coordinates show raw keyboard
+velocity -> corrected key velocity including trim, with final MIDI velocity
+listed separately. Global coordinates show the per-key result -> final output.
+Values are captured with the mapping snapshot that processed the event, retained
+after releases, and never recalculated by curve edits. The selected-key view
+recalls that key's last observed strike; the global view shows the latest one.
+Empty strike history shows dashes. A dedicated readout row keeps values separate
+from curve handles and their coordinate bubble. History is transient display
+state and does not alter profile/DAW serialization or dirty state.
+
+Extracted the existing per-key mapping stage into `perKeyMaps`; final composition
+is unchanged. Engine map publication now carries intermediate/final banks
+together, and a single atomic note-on snapshot includes all three velocities.
+Extended core/app regression sources for composition, both graph readouts in
+standalone/plugins, note-off/zero-velocity handling, manual key selection and
+historical values after edits. README and architecture updated. Source/API/
+whitespace checks only; no agent build, runtime tests or GitHub update. The user
+will build locally and validate marker placement and velocities on both tabs.
+
+Local build follow-up (2026-10-13): the user's Windows installer build failed
+compiling app tests. The new played-key tests accidentally duplicated the
+existing `MainComponentTestAccess::selectedNote` getter with a different return
+type and added a redundant `selectNote` overload, producing cascading MSVC
+declaration/call errors. Removed the new helpers and reused the existing getter
+and selector. Source/declaration/whitespace checks only; no agent rebuild or
+test execution. The user must rerun the installer build to verify all suites.
+
+Standalone routing, curve sharing and played-key selection (2026-10-13,
+source-only): removed application-created virtual MIDI outputs on all platforms,
+including the engine/factory creation flag and the old virtual-output preference.
+Users configure their own cable or select an existing output; existing saved
+output identifiers/names still restore. Standalone now monitors the selected
+input with routing off and resumes monitoring after capture. MIDI note-ons
+select the last played key and reveal it in the scrollable piano, in standalone
+and plugins, including an uncalibrated keyboard display with no loaded profile.
+Releases/controllers do not change selection; curve-point or trim dragging
+defers following and playing does not switch tabs or alter calibration data.
+
+Named shared curves now also save individually as `.velcal-curve.json` files
+under `profiles/curves`. The existing `.velcal-curve-presets.json` remains the
+authoritative compatibility index; opening it materializes individual copies,
+and library edits keep those copies current. Import/Export controls share one
+curve with all its settings; import copies it into the current profile and
+immediately updates effective MIDI maps, preserving per-key data. Duplicate
+names and export-file replacement require confirmation. Legacy profile-local
+presets remain embedded and can be copied with Save Preset. Profile schema and
+DAW recall remain unchanged; applied curves require no external preset file.
+README and architecture updated. Added source regressions for individual files,
+legacy-library materialization, rename/delete, import isolation/effective maps,
+invalid files and played-key following in standalone/plugins. No build or test
+execution: the user will build locally and perform hardware testing. No GitHub
+update requested or performed. This supersedes earlier native-virtual-output
+plans and the previously declined played-note-follow proposal.
 
 Cross-platform testing update (2026-10-13, documentation-only): the user reports
 0.0.4 standalone loads and receives/sends MIDI on Linux Mint and macOS, and
@@ -810,9 +903,9 @@ velocity 0 is not used because it conventionally means Note Off.
 
 App-wide state is stored in `profiles/.velcal-app-state.json` so this workspace
 stays on `D:`. Startup restores the last selected MIDI input, installed MIDI
-output, and last profile when those resources are available. The virtual-output
-selection is supported only on macOS/Linux; an old Windows virtual-output
-preference leaves the output unselected.
+output, and last profile when those resources are available. An obsolete
+application-created virtual-output preference leaves the output unselected on
+every platform; users must select an existing endpoint.
 
 The optional `VELCAL_PORTABLE` build stores profiles and app preferences in
 `profiles/` beside the Windows executable, Linux AppImage, or macOS `.app` bundle
@@ -845,15 +938,14 @@ paths remain absolute. Normal development builds keep their existing storage.
 - Activity reports raw and corrected velocity for the latest note.
 - Capture and routing are mutually exclusive.
 
-On Windows, selecting an already-installed virtual MIDI cable works. The
-unavailable `VelCal Output (virtual)` option has been removed from the Windows
-output list. Users create a port with loopMIDI (or another installed virtual MIDI
-cable), keep it running, restart VelCal to discover it, and select the same port
-as VelCal's output and the DAW's input. README contains setup instructions.
-Windows requires an explicit output selection on first use; missing selections
-show a generic selection warning when routing is requested. loopMIDI setup
-guidance belongs in README only, not in the app. macOS/Linux retain the native
-virtual-output option, but remain untested.
+Every platform now uses existing output endpoints and requires an explicit
+output selection on first use. Application-created virtual ports have been
+removed. Users configure their own cable, restart VelCal to discover it, and
+select the same port as VelCal's output and the DAW's input. README contains
+platform setup instructions for loopMIDI, IAC and ALSA MIDI Through. The app's
+missing-selection warning directs users to an existing output or a cable they
+have configured. Standalone listens to the selected input while routing is off,
+without sending MIDI, so played-key selection works before choosing an output.
 
 ## Real Hardware and Test Evidence
 
@@ -1109,14 +1201,11 @@ Treat failures found here as higher priority than new features.
 
 ### P3: MIDI and Platform Work
 
-1. Reproduce or close out the virtual MIDI endpoint stall investigation.
+1. Validate existing-output routing with user-configured cables on all platforms.
 2. Add robust device hot-plug refresh and unavailable-device states.
-3. Optionally evaluate a production Windows MIDI Services virtual endpoint when
-   the supported in-box API/toolchain is available and distributable; the current
-   Windows workflow uses user-created cables such as loopMIDI.
-4. Build and test CoreMIDI virtual output on macOS.
-5. Build and test ALSA sequencer virtual output on Linux.
-6. Extend the fake-output routing regressions with real hardware/DAW evidence
+3. Validate standalone input monitoring and played-key selection during routing,
+   capture, idle use and curve editing; validate host following in VST3/AU.
+4. Extend the fake-output routing regressions with real hardware/DAW evidence
    and device hot-plug cases.
 
 ### P4: Release

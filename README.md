@@ -61,9 +61,22 @@ you are ready to play through your DAW.
 <details>
 <summary><strong>Calibrate Your Keyboard</strong></summary>
 
-**Use a straight edge 50 cm or shorter.** Shorter sections cover fewer keys and
-require less force to press together, making firm presses easier to control
-and the required velocities easier to reach.
+**What calibration does**
+
+Helps individual keys respond more evenly when played with similar strength,
+reducing differences where some keys consistently play louder or softer.
+
+**What it won't do**
+
+It won't change the keyboard's physical feel or repair mechanical faults.
+It also won't make every note equally loud: differences in how softly or
+firmly you play are preserved.
+
+**Use a spirit level or another straight, rigid object no longer than 50 cm.**
+This means the object's overall length. Start with a short group of keys:
+pressing fewer keys together requires less combined force and makes firm
+presses easier to control. A 50 cm object may still cover too many keys for
+comfortable calibration on your keyboard.
 
 Use a rigid object with a straight, smooth edge, such as a straight piece of
 wood or a spirit level. Keep it clean, with a thin, even protective layer if
@@ -77,10 +90,14 @@ VelCal groups presses by their median MIDI velocity:
 | Medium | 43-84 |
 | Firm | 85-127 |
 
-Higher velocities require faster key movement. A firm, fast press on one key
-can make a mechanical thump as it reaches the bottom of its travel; pressing
-a group together can make a much louder thump. **Stop if you feel uncomfortable
-or need excessive force.** Try a shorter section rather than hitting harder.
+Higher MIDI velocities require faster key movement. A fast press can produce
+a mechanical thump when a key reaches the bottom of its travel. Pressing
+several keys together can make the thump much louder.
+
+**Do not hit harder or continue through discomfort just to reach Firm.** Try
+a shorter object covering fewer keys. If reaching Firm still requires
+uncomfortable force or impacts, stop automatic calibration for those keys and
+manually adjust their individual velocity curves instead.
 
 1. In **Per-key calibration**, choose **White keys** under **Calibration keys**.
    Rest the straight edge across a short group of white keys at their front
@@ -91,6 +108,8 @@ or need excessive force.** Try a shorter section rather than hitting harder.
    help distribute it evenly across the keys. Keep the edge level and in the
    same position throughout the section. Avoid rocking or flexing, which can
    distort the measurements.
+   Keep the same keys covered throughout each capture. If you need to change
+   the object's position or use a shorter section, start a fresh capture.
    Mix soft, medium, and firm presses, fully releasing the keys each time.
    The first few presses identify which keys are under the bar.
 4. Follow the live guidance until the section is ready. Each covered key needs
@@ -101,16 +120,17 @@ or need excessive force.** Try a shorter section rather than hitting harder.
    previous section by at least two white keys (three or four is better), and
    repeat for the range you want to calibrate.
 6. Choose **Black keys** and repeat the process for the black keys, overlapping
-   each new black-key section with the previous one.
+   each new black-key section with the previous one by at least two black keys
+   (three or four is better).
 7. Select **Save** in the profile menu when you are finished.
 
 Overlap lets VelCal compare neighbouring sections within each key colour.
 You can calibrate just the range you use; uncalibrated keys have no automatic
 per-key correction.
 
-If firm samples still will not register with a shorter edge, check whether
+If firm samples still will not register with a shorter object, check whether
 individual keys comfortably reach velocity 85 or above. Report persistent
-difficulty with your keyboard model, edge length, number of covered keys, and
+difficulty with your keyboard model, object length, number of covered keys, and
 observed velocities.
 
 The keyboard display helps you check progress: amber means a key still needs
@@ -134,6 +154,8 @@ Keyboard -> VelCal -> MIDI port -> DAW or software instrument
 ```
 
 Set up a virtual MIDI connection using the instructions for your platform below.
+VelCal uses existing MIDI outputs on every platform; it does not create a virtual
+MIDI cable itself.
 These connections carry MIDI, not audio. Have the instrument track listen to
 the virtual port rather than also receiving the physical keyboard directly,
 otherwise you may hear duplicate notes or uncorrected notes. Do not send the
@@ -221,6 +243,27 @@ changes do not alter existing profiles or DAW projects. Older profile-local
 presets remain available with a `(profile)` suffix; apply one and select
 **Save preset** to add it to the shared library.
 
+Each saved custom preset also has its own `.velcal-curve.json` file in the
+`curves` subfolder of VelCal's profile folder. Existing shared presets gain
+these files automatically. Use **Export** to choose a location for a copy of
+the current global curve, then share that file. **Import** adds a single curve
+to your shared presets and applies it to the current profile without changing
+its per-key calibration. Duplicate preset names require confirmation before
+replacement. The applied curve remains part of the profile and DAW project,
+so recall does not depend on the shared file being present.
+
+Playing a key selects it in the per-key view and scrolls it into view when
+needed, including when standalone routing is off. For chords, the last MIDI
+note-on received is selected; releasing a key leaves it selected. Playing
+notes while viewing the global curve does not switch tabs.
+
+Both curve graphs show the last strike with a cyan marker, guide lines and
+numeric input/output velocities. The per-key graph shows keyboard input and
+the corrected key velocity including trim, plus **MIDI** for the final velocity
+after the global curve. The global graph shows its input after per-key
+correction and its final output. Releasing the key leaves the marker visible;
+editing the curve does not rewrite the velocities of an already-played strike.
+
 </details>
 
 <details>
@@ -256,8 +299,8 @@ The choice takes effect immediately, is remembered across restarts, and is share
 by standalone and plugin editors. It does not alter your calibration profiles.
 
 The small version label above **Global curve** shows the installed version
-(for example, `v0.0.4`). When a newer release is found, it shows
-`v0.0.4 - v0.0.5 is available`. Check details are in its tooltip; checking or an unavailable
+(for example, `v0.0.5`). When a newer release is found, it shows
+`v0.0.5 - v0.0.6 is available`. Check details are in its tooltip; checking or an unavailable
 check leaves the installed version visible. It does not download or install updates automatically;
 use the [release downloads](https://github.com/SH4DOWSIX/VelCal/releases/latest)
 to update. Your saved profiles/preferences are retained during an upgrade.

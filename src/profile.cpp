@@ -465,13 +465,9 @@ CalibrationProfile deserializeProfile(const std::string& data)
     return profile;
 }
 
-std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile)
+std::array<VelocityMap, 128> perKeyMaps(const CalibrationProfile& profile)
 {
     auto maps = profile.generated.noteMaps;
-    const auto global = profile.globalCurve.points.empty()
-        ? makeVelocityCurve(profile.globalCurve.curvature,
-            profile.globalCurve.minimumOutput, profile.globalCurve.maximumOutput)
-        : makeVelocityCurve(profile.globalCurve.points, profile.globalCurve.smooth);
     for (std::size_t note = 0; note < maps.size(); ++note) {
         const auto& curve = profile.noteCurveOverrides[note];
         if (!curve.points.empty())
@@ -481,9 +477,22 @@ std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile)
         for (std::size_t velocity = 1; velocity < maps[note].values.size(); ++velocity) {
             const auto adjusted = static_cast<std::uint8_t>(std::clamp(
                 static_cast<int>(maps[note].values[velocity]) + profile.noteAdjustments[note], 1, 127));
-            maps[note].values[velocity] = global.apply(adjusted);
+            maps[note].values[velocity] = adjusted;
         }
     }
+    return maps;
+}
+
+std::array<VelocityMap, 128> effectiveMaps(const CalibrationProfile& profile)
+{
+    auto maps = perKeyMaps(profile);
+    const auto global = profile.globalCurve.points.empty()
+        ? makeVelocityCurve(profile.globalCurve.curvature,
+            profile.globalCurve.minimumOutput, profile.globalCurve.maximumOutput)
+        : makeVelocityCurve(profile.globalCurve.points, profile.globalCurve.smooth);
+    for (auto& map : maps)
+        for (std::size_t velocity = 1; velocity < map.values.size(); ++velocity)
+            map.values[velocity] = global.apply(map.values[velocity]);
     return maps;
 }
 

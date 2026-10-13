@@ -17,13 +17,17 @@
 class MidiEngine final : private juce::MidiInputCallback {
 public:
     using MapBank = std::array<velcal::VelocityMap, 128>;
+    struct Mapping {
+        MapBank output;
+        MapBank perKey;
+    };
 
     class OutputDevice {
     public:
         virtual ~OutputDevice() = default;
         virtual void send(const juce::MidiMessage& message) = 0;
     };
-    using OutputFactory = std::function<std::unique_ptr<OutputDevice>(const juce::String&, bool)>;
+    using OutputFactory = std::function<std::unique_ptr<OutputDevice>(const juce::String&)>;
 
     struct Activity {
         std::uint64_t messagesReceived{};
@@ -35,18 +39,21 @@ public:
         std::uint64_t messagesDropped{};
         bool outputOpening{};
         juce::String outputError;
+        std::uint64_t playedNoteEvent{};
     };
 
     explicit MidiEngine(OutputFactory factory = {});
     ~MidiEngine() override;
 
     void setMaps(const MapBank& maps);
+    void setMaps(const MapBank& maps, const MapBank& perKey);
     bool startRouting(
         const juce::String& inputIdentifier,
         const juce::String& outputIdentifier,
-        bool createVirtualOutput,
         juce::String& error);
     bool startCapture(const juce::String& inputIdentifier, juce::String& error);
+    bool startMonitoring(const juce::String& inputIdentifier, juce::String& error);
+    bool isListening() const noexcept { return input != nullptr; }
     std::vector<velcal::NoteOn> getCapturedEventsSnapshot();
     std::vector<velcal::NoteOn> finishCapture();
     void cancelCapture();
@@ -64,10 +71,10 @@ private:
         juce::MidiInput* source,
         const juce::MidiMessage& message) override;
     struct OutputSession;
-    bool startOutput(const juce::String& identifier, bool createVirtual, juce::String& error);
+    bool startOutput(const juce::String& identifier, juce::String& error);
     static void outputWorkerLoop(
         const std::shared_ptr<OutputSession>& session, const OutputFactory& factory,
-        const juce::String& identifier, bool createVirtual);
+        const juce::String& identifier);
     void tripRoutingSafety();
     friend struct MidiEngineTestAccess;
 
@@ -75,7 +82,7 @@ private:
     OutputFactory outputFactory;
     std::shared_ptr<OutputSession> outputSession;
     std::shared_ptr<OutputSession> stalledOutput;
-    std::shared_ptr<const MapBank> maps;
+    std::shared_ptr<const Mapping> maps;
     std::atomic<bool> capturing{false};
     std::mutex captureMutex;
     std::vector<velcal::NoteOn> capturedEvents;
@@ -88,10 +95,14 @@ private:
     std::atomic<std::uint8_t> lastNote{0};
     std::atomic<std::uint8_t> lastRawVelocity{0};
     std::atomic<std::uint8_t> lastCorrectedVelocity{0};
+    // Low bytes: note, raw, per-key and final velocity. High bits: event sequence.
+    std::atomic<std::uint64_t> playedNoteEvent{0};
     bool hostMode{};
     juce::SpinLock hostMapLock;
-    MapBank hostPublishedMaps{};
-    MapBank hostAudioMaps{};
+    Mapping hostPublishedMaps{};
+    Mapping hostAudioMaps{};
+    void recordPlayedNote(std::uint8_t note, std::uint8_t raw,
+        std::uint8_t perKey, std::uint8_t output) noexcept;
     struct HostCaptureEvent {
         velcal::NoteOn note;
         std::uint64_t generation{};
