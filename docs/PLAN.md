@@ -53,6 +53,22 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+0.0.5 published (2026-10-13), after the user approved the release notes and
+requested publication using the completed native builds:
+https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.5
+Run 38422334065 passed Windows x64, Linux x64 and universal macOS builds, tests,
+packaging and installer verification, including both macOS AU architectures.
+Tag 0.0.5 points to tested source revision
+`bf359a63bfac333fec77dc67b22282073e93d79d`. Downloaded the three installer
+artifacts into `build/releases/0.0.5/artifacts` and checked the four installer
+names, sizes, file headers and Linux/macOS archive structure. Uploaded all four
+installers plus SHA256SUMS.txt; each GitHub asset size and SHA256 digest matched
+the local files. Verified non-draft/non-prerelease publication, latest-release
+status, tag revision and the published notes. README release link and release
+notes are updated. This documentation-only follow-up does not change build
+inputs. No new builds performed. Hands-on marker/popup validation and broader
+Linux/macOS calibration/DAW recall remain outstanding as recorded in the notes.
+
 0.0.5 source pushed and all-platform builds started (2026-10-13), as requested
 by the user. Pushed source revision `bf359a63bfac333fec77dc67b22282073e93d79d`
 includes all session changes, version 0.0.5 and prepared release notes in
@@ -1272,7 +1288,7 @@ macOS (11+ target). Unix builds use `build/ci` and
 macOS verifies universal slices, ad-hoc signatures, and AU validation, then
 outputs an unsigned PKG. Native installer/uninstaller smoke checks preserve
 user profiles. Artifacts do not automatically publish releases. Current release
-notes are `docs/releases/0.0.4.md`. Windows has the most extensive MIDI/DAW
+notes are `docs/releases/0.0.5.md`. Windows has the most extensive MIDI/DAW
 evidence; Linux Mint/macOS 0.0.4 standalone MIDI input/output and plugin loading
 have also been confirmed by the user.
 

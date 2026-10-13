@@ -17,7 +17,7 @@ Windows, Linux Mint, and macOS. Testing is most extensive on Windows;
 Linux Mint and macOS testing has confirmed standalone MIDI input/output and
 plugin loading (VST3, plus AU on macOS). See
 [installation and DAW routing](docs/INSTALLING.md) and
-[0.0.4 release notes](docs/releases/0.0.4.md), including unsigned-installer warnings
+[0.0.5 release notes](docs/releases/0.0.5.md), including unsigned-installer warnings
 and build-verification status.
 
 ## What You Can Do
