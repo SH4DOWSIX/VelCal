@@ -56,7 +56,8 @@ curve, and output limits.
 You do not need to set up a MIDI output just to calibrate. Set up routing when
 you are ready to play through your DAW.
 
-## Calibrate Your Keyboard
+<details>
+<summary><strong>Calibrate Your Keyboard</strong></summary>
 
 **Use a straight edge 50 cm or shorter.** Shorter sections cover fewer keys and
 require less force to press together, making firm presses easier to control
@@ -114,7 +115,10 @@ The keyboard display helps you check progress: amber means a key still needs
 data; cyan means it is being boosted; red means it is being reduced; grey means
 it is already close to neutral. A key without a status strip has no measurements.
 
-## Play Through Your DAW
+</details>
+
+<details>
+<summary><strong>Play Through Your DAW</strong></summary>
 
 With VST3, load VelCal as an instrument on its own track, then select that
 instance as the piano track's MIDI input. It is not an audio insert. With Logic,
@@ -127,11 +131,16 @@ For standalone, the MIDI path should be:
 Keyboard -> VelCal -> MIDI port -> DAW or software instrument
 ```
 
+Set up a virtual MIDI connection using the instructions for your platform below.
+These connections carry MIDI, not audio. Have the instrument track listen to
+the virtual port rather than also receiving the physical keyboard directly,
+otherwise you may hear duplicate notes or uncorrected notes. Do not send the
+DAW's MIDI output back into VelCal's input.
+
 ### Windows
 
-VelCal does not create its own virtual MIDI cable on Windows. Use
-[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html), or another
-installed virtual MIDI cable. This is a MIDI connection, not a virtual audio cable.
+Use [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html), or another
+installed virtual MIDI cable.
 
 1. Install and open loopMIDI. Use its **+** button to create a port named
    `VelCal Output`, and keep loopMIDI running.
@@ -141,18 +150,53 @@ installed virtual MIDI cable. This is a MIDI connection, not a virtual audio cab
    Load a software instrument and enable the track's monitoring as needed.
 4. Load your saved profile in VelCal and enable **Route MIDI**.
 
-Have the instrument track listen to the virtual port rather than also receiving
-the physical keyboard directly, otherwise you may hear duplicate notes or
-uncorrected notes. Do not send the DAW's MIDI output back into VelCal's input.
+### macOS
 
-### macOS And Linux
+Use the built-in **IAC Driver**; no additional virtual MIDI software is needed.
 
-Select **VelCal Output (virtual)** as VelCal's MIDI output, then select the
-`VelCal Output` port in your DAW and enable **Route MIDI**. You can also select
-an existing MIDI output instead. Native virtual ports are implemented, but
-hardware and DAW behaviour on these platforms has not yet been verified.
+1. Open **Audio MIDI Setup** and choose **Window > Show MIDI Studio**.
+2. Double-click **IAC Driver** and enable **Device is online**.
+3. Add a bus named `VelCal Output` and click **Apply**.
+4. Start or restart VelCal. Select your keyboard as **MIDI input** and the IAC
+   bus you created as **MIDI output**; its name may include `IAC Driver`.
+5. Select the same bus as your instrument track's MIDI input in the DAW.
+   Enable track monitoring, load your VelCal profile, and enable **Route MIDI**.
 
-## Adjust The Feel
+See [Apple's IAC setup guide](https://support.apple.com/guide/audio-midi-setup/transfer-midi-information-between-apps-ams1013/mac).
+
+### Linux
+
+Use the free **ALSA MIDI Through** port, which forwards incoming MIDI to
+applications listening to it.
+
+1. Look for `Midi Through` in your available MIDI devices. If it is missing,
+   enable the kernel module in a terminal:
+
+   ```sh
+   sudo modprobe snd-seq-dummy
+   ```
+
+2. Start or restart VelCal. Select your keyboard as **MIDI input** and
+   `Midi Through Port-0` (or its corresponding displayed name) as **MIDI output**.
+3. Select the matching MIDI Through port as your DAW instrument track's input.
+   Enable track monitoring, load your VelCal profile, and enable **Route MIDI**.
+
+The module must be available in your distribution's kernel. If the port is
+missing again after reboot, reload the module or configure your distribution
+to load it at startup. If your DAW requires external ALSA connections, use
+`aconnect` from `alsa-utils` or [QjackCtl](https://github.com/rncbc/qjackctl)'s
+ALSA connection view. DAWs using only JACK MIDI may also need an ALSA-to-JACK
+bridge.
+
+See the [ALSA MIDI Through implementation](https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c)
+and [aconnect documentation](https://github.com/alsa-project/alsa-utils/blob/master/seq/aconnect/aconnect.1).
+These macOS/Linux standalone routing instructions have not yet been verified
+with VelCal on real hardware and DAWs.
+
+</details>
+
+<details>
+<summary><strong>Adjust The Feel</strong></summary>
 
 In **Per-key calibration**, select a key on the displayed keyboard to adjust
 it individually. Drag points on its curve, click to add a point, or right-click
@@ -175,7 +219,10 @@ changes do not alter existing profiles or DAW projects. Older profile-local
 presets remain available with a `(profile)` suffix; apply one and select
 **Save preset** to add it to the shared library.
 
-## Profiles And Appearance
+</details>
+
+<details>
+<summary><strong>Profiles And Appearance</strong></summary>
 
 The menu button immediately left of the profile selector provides **New profile**,
 **Open profile**, **Save**, **Save As**, **Reset All** and **Delete profile**
@@ -213,7 +260,10 @@ check leaves the installed version visible. It does not download or install upda
 use the [release downloads](https://github.com/SH4DOWSIX/VelCal/releases/latest)
 to update. Your saved profiles/preferences are retained during an upgrade.
 
-## Notes And Help
+</details>
+
+<details>
+<summary><strong>Notes And Help</strong></summary>
 
 - The display always shows 88 keys, even for smaller keyboards; MIDI processing
   supports all 128 MIDI notes.
@@ -228,12 +278,20 @@ to update. Your saved profiles/preferences are retained during an upgrade.
   [Open an issue](https://github.com/SH4DOWSIX/VelCal/issues/new) with your OS,
   keyboard, DAW, and steps to reproduce it.
 
-## Development
+</details>
+
+<details>
+<summary><strong>Development</strong></summary>
 
 Want to build or contribute? See the [build guide](docs/BUILDING.md) and
 [architecture overview](docs/architecture.md). The detailed project handoff
 is in [docs/PLAN.md](docs/PLAN.md).
 
-## Licence
+</details>
+
+<details>
+<summary><strong>Licence</strong></summary>
 
 AGPL-3.0-only. See [LICENSE](LICENSE).
+
+</details>
