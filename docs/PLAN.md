@@ -53,6 +53,13 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Straight-edge length guidance (2026-10-13, documentation-only): added a bold
+50 cm-or-shorter recommendation at the start of README calibration guidance,
+with the shorter-section explanation replacing the previous resistance wording
+to avoid repetition. The user authorized its GitHub push. Whitespace checks
+passed; the remote installer workflow remains manual-only. No build or runtime
+tests requested.
+
 Calibration placement clarification (2026-10-13, documentation-only): README specifies
 the front ends of the keys closest to the player, with the bar parallel to the
 keyboard's front edge and equal contact distance from each key's front end.

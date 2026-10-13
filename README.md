@@ -60,10 +60,13 @@ you are ready to play through your DAW.
 
 ## Calibrate Your Keyboard
 
+**Use a straight edge 50 cm or shorter.** Shorter sections cover fewer keys and
+require less force to press together, making firm presses easier to control
+and the required velocities easier to reach.
+
 Use a rigid object with a straight, smooth edge, such as a straight piece of
 wood or a spirit level. Keep it clean, with a thin, even protective layer if
-needed to prevent scratches. A shorter group of keys is easier to press because
-you are overcoming less combined resistance.
+needed to prevent scratches.
 
 VelCal groups presses by their median MIDI velocity:
 
