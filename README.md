@@ -61,18 +61,9 @@ you are ready to play through your DAW.
 ## Calibrate Your Keyboard
 
 Use a rigid object with a straight, smooth edge, such as a straight piece of
-wood or a spirit level. It only needs to cover a short group of keys. Covering
-more keys increases the combined resistance, so use a shorter section if
-pressing the group evenly is difficult.
-
-Make sure the edge is clean and smooth. If you add a protective layer to prevent
-scratches, keep it thin and even. Rest the edge on the keys before each press
-and keep its position consistent.
-
-Push down near the middle, keeping the edge level throughout the press.
-Tilting, rocking, or flexing can move keys at different speeds, which VelCal
-may mistake for differences between their responses. Fully release all keys
-between presses.
+wood or a spirit level. Keep it clean, with a thin, even protective layer if
+needed to prevent scratches. A shorter group of keys is easier to press because
+you are overcoming less combined resistance.
 
 VelCal groups presses by their median MIDI velocity:
 
@@ -82,30 +73,18 @@ VelCal groups presses by their median MIDI velocity:
 | Medium | 43-84 |
 | Firm | 85-127 |
 
-These categories describe the recorded velocity, rather than how hard a press
-feels. MIDI velocity reflects how quickly the keyboard action moves; a slow
-press can produce low velocity even with substantial pressure. Accelerating
-several keys together requires more effort and can produce a stronger impact
-at the bottom of their travel.
-
-**Do not use harsh impacts or continue if you feel uncomfortable.** If firm
-presses require excessive effort, try a shorter group of keys while maintaining
-overlap between sections. If firm samples still will not register, stop and
-report your keyboard model, straight-edge length, number of covered keys, and
-observed velocities. Checking whether individual keys comfortably reach 85 or
-above can help distinguish the keyboard's response from a limitation of the
-bar method.
-
-A section remains incomplete until each covered key has eight accepted
-measurements in each category. Do not force completion by repeatedly hitting
-the keyboard harder.
+Higher velocities require faster key movement. A firm, fast press on one key
+can make a mechanical thump as it reaches the bottom of its travel; pressing
+a group together can make a much louder thump. **Stop if you feel uncomfortable
+or need excessive force.** Try a shorter section rather than hitting harder.
 
 1. In **Per-key calibration**, choose **White keys** under **Calibration keys**.
-   Place the straight edge across a group of white keys.
+   Rest the straight edge across a short group of white keys.
 2. Select **Start section**, read the guide, then select **Begin capture**.
-3. Press the same group together repeatedly, fully releasing the keys each
-   time. Make a mixture of soft, medium, and firm presses. The first few presses
-   let VelCal identify which keys are under the bar.
+3. Press near the middle of the edge, keeping it level and its position
+   consistent. Avoid rocking or flexing, which can distort the measurements.
+   Mix soft, medium, and firm presses, fully releasing the keys each time.
+   The first few presses identify which keys are under the bar.
 4. Follow the live guidance until the section is ready. Each covered key needs
    at least eight accepted soft, eight medium, and eight firm measurements.
    Incomplete or inconsistent presses may not count, so this can take more
@@ -117,9 +96,14 @@ the keyboard harder.
    each new black-key section with the previous one.
 7. Select **Save** in the profile menu when you are finished.
 
-Keep sections overlapping within each key colour. Without shared keys, VelCal
-cannot reliably compare the response of neighbouring sections. You can calibrate
-just the range you use; uncalibrated keys have no automatic per-key correction.
+Overlap lets VelCal compare neighbouring sections within each key colour.
+You can calibrate just the range you use; uncalibrated keys have no automatic
+per-key correction.
+
+If firm samples still will not register with a shorter edge, check whether
+individual keys comfortably reach velocity 85 or above. Report persistent
+difficulty with your keyboard model, edge length, number of covered keys, and
+observed velocities.
 
 The keyboard display helps you check progress: amber means a key still needs
 data; cyan means it is being boosted; red means it is being reduced; grey means

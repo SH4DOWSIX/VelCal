@@ -53,6 +53,14 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Calibration README revision (2026-10-13, documentation-only): removed repeated release,
+coverage and placement instructions, and clarified that simultaneous firm
+presses can produce a louder mechanical thump than a single-key press. Retained
+the velocity regions, 8/8/8 requirement, overlapping workflow and stop-if-
+uncomfortable guidance. The user reviewed the full section and authorized its
+GitHub push. Whitespace checks passed; the remote installer workflow remains
+manual-only. No build or runtime tests requested.
+
 Calibration guidance (2026-10-13, documentation-only): README now explains the
 median-velocity regions, combined resistance of longer sections, consistent
 bar placement and thin/even protective layers. Firm capture must not require
