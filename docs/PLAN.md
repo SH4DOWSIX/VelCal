@@ -53,6 +53,13 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Calibration placement clarification (2026-10-13, documentation-only): README specifies
+the front ends of the keys closest to the player, with the bar parallel to the
+keyboard's front edge and equal contact distance from each key's front end.
+Force is applied at the centre of the bar's length, replacing "near the middle".
+The user approved the wording and authorized its GitHub push. Whitespace checks
+passed; the remote installer workflow remains manual-only. No build or tests.
+
 Calibration README revision (2026-10-13, documentation-only): removed repeated release,
 coverage and placement instructions, and clarified that simultaneous firm
 presses can produce a louder mechanical thump than a single-key press. Retained

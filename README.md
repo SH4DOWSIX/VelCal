@@ -79,10 +79,14 @@ a group together can make a much louder thump. **Stop if you feel uncomfortable
 or need excessive force.** Try a shorter section rather than hitting harder.
 
 1. In **Per-key calibration**, choose **White keys** under **Calibration keys**.
-   Rest the straight edge across a short group of white keys.
+   Rest the straight edge across a short group of white keys at their front
+   ends, closest to you. Keep it parallel to the keyboard's front edge so it
+   contacts every key at the same distance from its front end, not diagonally.
 2. Select **Start section**, read the guide, then select **Begin capture**.
-3. Press near the middle of the edge, keeping it level and its position
-   consistent. Avoid rocking or flexing, which can distort the measurements.
+3. Apply the downward force at the centre of the straight edge's length to
+   help distribute it evenly across the keys. Keep the edge level and in the
+   same position throughout the section. Avoid rocking or flexing, which can
+   distort the measurements.
    Mix soft, medium, and firm presses, fully releasing the keys each time.
    The first few presses identify which keys are under the bar.
 4. Follow the live guidance until the section is ready. Each covered key needs
