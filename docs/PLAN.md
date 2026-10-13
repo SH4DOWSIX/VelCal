@@ -53,17 +53,20 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
-0.0.5 source push and all-platform builds authorized (2026-10-13): the user
-requested the version bump, pushing all changes from this session and starting
-fresh Windows x64, Linux x64 and universal macOS installer jobs. Version follows
-PROJECT_VERSION in CMake. Prepared `docs/releases/0.0.5.md` with feature changes,
-compatibility and explicit hardware-testing limitations. Remote main was fetched
-and matched the local branch; its only workflow is manual-only. Review/stage
-source, tests and docs only, excluding builds, dependencies, caches, profiles
-and captures. Dispatch platform=all after pushing. Do not poll: wait for the
-user's completion notice before checking results. Release publication is a
-later step; no tag or release is authorized by this build request. No local
-build requested. The newest marker/popup changes remain runtime-unverified.
+0.0.5 source pushed and all-platform builds started (2026-10-13), as requested
+by the user. Pushed source revision `bf359a63bfac333fec77dc67b22282073e93d79d`
+includes all session changes, version 0.0.5 and prepared release notes in
+`docs/releases/0.0.5.md`. The reviewed 15-file commit contains source, tests and
+docs only, excluding builds, dependencies, caches, profiles and captures.
+Remote main matched the local branch before the push; its only workflow was
+verified manual-only. Dispatched fresh Windows x64, Linux x64 and universal
+macOS installer jobs with platform=all from that revision:
+https://github.com/SH4DOWSIX/VelCal/actions/runs/38422334065
+This subsequent handoff update is documentation-only. Do not poll: wait for the
+user's completion notice before checking results. No local build performed.
+Release publication is a later step; no tag or release is authorized by this
+build request. The newest marker/popup changes remain runtime-unverified;
+prepared release notes retain explicit hardware-testing limitations.
 
 Calibration expectations (2026-10-13, source-only): added the user's approved
 "What calibration does" and "What it won't do" explanation above the popup's
