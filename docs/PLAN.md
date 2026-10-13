@@ -1,6 +1,6 @@
 # VelCal Project Handoff and Plan
 
-Last updated: 2026-10-07
+Last updated: 2026-10-13
 
 This is the durable starting point for a new VelCal development conversation.
 Read `AGENTS.md` first for workspace rules, then this file before proposing or
@@ -52,6 +52,18 @@ build outputs to `C:`. The drive is nearly full.
 See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
+
+Calibration guidance (2026-10-13, documentation-only): README now explains the
+median-velocity regions, combined resistance of longer sections, consistent
+bar placement and thin/even protective layers. Firm capture must not require
+harsh impacts or continuing through discomfort; users should try shorter
+overlapping groups and report persistent difficulty, comparing individual-key
+velocities where comfortable. The user reports uncomfortable impacts reaching
+firm with a 50cm spirit level on an MP11SE. Capture-method practicality remains
+an open hardware-validation concern; thresholds and the 8/8/8 rule are unchanged.
+The user subsequently authorized pushing this documentation change to GitHub.
+Whitespace checks passed; no build or runtime tests requested. The remote's
+only installer workflow was verified manual-only before the source push.
 
 0.0.4 published (2026-10-07), after the user requested publication:
 https://github.com/SH4DOWSIX/VelCal/releases/tag/0.0.4
