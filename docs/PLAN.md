@@ -53,6 +53,18 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+Cross-platform testing update (2026-10-13, documentation-only): the user reports
+0.0.4 standalone loads and receives/sends MIDI on Linux Mint and macOS, and
+plugins load as VST3 and AU (macOS). Windows retains the most extensive
+keyboard/DAW evidence. README and 0.0.4 release notes now record this evidence
+without the blanket Linux/macOS experimental label. Full Linux/macOS
+calibration, DAW MIDI routing (including Logic), and project recall remain
+unverified. These results remain historical evidence for later releases;
+hands-on testing of every release on every platform is not required. Prioritize
+fresh platform testing when packaging, MIDI devices, plugin formats, or
+platform-specific behavior changes. The user authorized the documentation
+push and published 0.0.4 notes update. No build or runtime tests requested.
+
 README feature-list review (2026-10-13, documentation-only): combined the two
 calibration bullets, clarified independent smoothing and DAW project recall,
 included custom global presets, and left accent-colour details in the existing
@@ -103,8 +115,9 @@ validation). Public tag 0.0.4 points to tested revision
 only. Four installer assets plus SHA256SUMS.txt were uploaded, with each GitHub
 asset size and SHA256 digest matching local files under build/releases/0.0.4.
 Verified non-draft/non-prerelease publication and latest-release status. Notes
-in docs/releases/0.0.4.md retain the Windows-only real hardware/DAW validation
-caveat. No additional builds were run or requested.
+originally retained the Windows-only real hardware/DAW validation caveat;
+the 2026-10-13 testing update above supersedes it. No additional builds were
+run or requested.
 
 All-platform build and conditional release authorized (2026-10-07): the user
 requested fresh Windows x64, Linux x64 and universal macOS installer jobs for
@@ -844,6 +857,12 @@ virtual-output option, but remain untested.
 
 ## Real Hardware and Test Evidence
 
+For 0.0.4, the user reports successful standalone startup and MIDI input/output
+on Linux Mint and macOS, plus successful VST3 and AU (macOS) plugin loading.
+OS versions, macOS architecture and host names were not supplied. This confirms
+basic operation; full calibration, plugin MIDI routing and project recall on
+these platforms have not been reported. Windows evidence is more extensive.
+
 Hardware/input used during development includes a Kawai piano exposed as
 `KAWAI USB MIDI`. Existing virtual endpoints on the machine include names such as
 `LM - Keysight Input` and `LM - PianoVFX Input`.
@@ -1012,7 +1031,9 @@ user's explicit permission.
 
 ### Product Gaps
 
-- macOS and Linux have not been physically tested with MIDI hardware/DAWs.
+- Linux Mint and macOS standalone MIDI input/output and plugin loading were
+  confirmed for 0.0.4; broader calibration, DAW routing and project recall
+  remain unverified.
 - The newest smart capture guide, curve editor, axis labels, keyboard status
   colours, and `8/8/8` readiness rule need a fresh end-to-end user pass.
 - There is no section manager for reviewing, deleting, or recapturing one bad
@@ -1042,7 +1063,8 @@ Portable distribution is retired by request; no paid Apple signing/notarization.
 1. Windows installer Release and core/app/plugin suites passed locally (3/3).
 2. All native tests and installer checks passed, including both AU architectures.
 3. Verified 0.0.2 installers/checksums published; no portable assets.
-4. Obtain real Linux/macOS/Logic testing; CI is not hardware/host evidence.
+4. Extend the 0.0.4 Linux Mint/macOS evidence to calibration, DAW MIDI routing
+   (including Logic) and project recall when testing is available.
 5. Continue full Windows calibration/editor/pedal/multiple-instance host checks.
 
 ### P0: Validate the Current Milestone
@@ -1158,7 +1180,9 @@ macOS (11+ target). Unix builds use `build/ci` and
 macOS verifies universal slices, ad-hoc signatures, and AU validation, then
 outputs an unsigned PKG. Native installer/uninstaller smoke checks preserve
 user profiles. Artifacts do not automatically publish releases. Current release
-notes are `docs/releases/0.0.3.md`. Only Windows has real MIDI/DAW evidence.
+notes are `docs/releases/0.0.4.md`. Windows has the most extensive MIDI/DAW
+evidence; Linux Mint/macOS 0.0.4 standalone MIDI input/output and plugin loading
+have also been confirmed by the user.
 
 For specific debugging or offline-tool work, the separate Debug build remains
 available. It is not the default build for local app delivery. From

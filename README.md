@@ -12,8 +12,10 @@ physical action.
 **[Download VelCal](https://github.com/SH4DOWSIX/VelCal/releases/latest)**
 
 Installers include standalone and VST3 on Windows, Linux, and
-macOS, plus an AU MIDI effect for Logic on macOS. Only Windows has real keyboard
-and DAW validation; Linux/macOS are experimental. See
+macOS, plus an AU MIDI effect for Logic on macOS. VelCal has been tested on
+Windows, Linux Mint, and macOS. Testing is most extensive on Windows;
+Linux Mint and macOS testing has confirmed standalone MIDI input/output and
+plugin loading (VST3, plus AU on macOS). See
 [installation and DAW routing](docs/INSTALLING.md) and
 [0.0.4 release notes](docs/releases/0.0.4.md), including unsigned-installer warnings
 and build-verification status.
@@ -190,8 +192,8 @@ bridge.
 
 See the [ALSA MIDI Through implementation](https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c)
 and [aconnect documentation](https://github.com/alsa-project/alsa-utils/blob/master/seq/aconnect/aconnect.1).
-These macOS/Linux standalone routing instructions have not yet been verified
-with VelCal on real hardware and DAWs.
+Standalone MIDI input/output has been confirmed on Linux Mint and macOS.
+Broader DAW routing and calibration testing remains ongoing.
 
 </details>
 
