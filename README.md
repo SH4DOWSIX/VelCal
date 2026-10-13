@@ -20,18 +20,16 @@ and build-verification status.
 
 ## What You Can Do
 
-- Calibrate individual keys automatically by pressing groups of keys together.
-- Work across the keyboard in short, overlapping sections, with separate passes
-  for white and black keys.
-- Fine-tune a selected key's response with an adjustment slider or editable curve.
-- Change the feel of the whole keyboard with a global curve and presets such as
-  Soft touch, Firm touch, Compressed, and Wide dynamics.
-- Switch smoothing on or off for all keys together, with a separate Smooth
-  setting for the global curve.
-- Save profiles and load them again for future playing sessions.
-- Send corrected MIDI to your DAW while preserving pedals, pitch bend, and other
-  MIDI messages.
-- Choose from 16 remembered accent colours, shared by standalone and plugins.
+- Automatically calibrate each key's velocity response by pressing groups in
+  short, overlapping sections, with separate passes for white and black keys.
+- Fine-tune individual keys with an adjustment slider or editable velocity curve.
+- Shape the whole keyboard's response with a global velocity curve, built-in
+  presets, and your own saved presets.
+- Toggle smoothing for the per-key curves and global curve independently.
+- Save and reload calibration profiles, and recall plugin settings with your
+  DAW project.
+- Send corrected MIDI to your DAW or software instrument while preserving
+  pedals, pitch bend, and other MIDI messages.
 
 ## Screenshots
 

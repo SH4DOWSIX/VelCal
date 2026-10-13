@@ -53,6 +53,13 @@ See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
 
+README feature-list review (2026-10-13, documentation-only): combined the two
+calibration bullets, clarified independent smoothing and DAW project recall,
+included custom global presets, and left accent-colour details in the existing
+appearance section. The user approved the revised list and authorized its
+GitHub push. Whitespace checks passed; the remote installer workflow remains
+manual-only. No behavior changes, build or runtime tests requested.
+
 Straight-edge length guidance (2026-10-13, documentation-only): added a bold
 50 cm-or-shorter recommendation at the start of README calibration guidance,
 with the shorter-section explanation replacing the previous resistance wording
