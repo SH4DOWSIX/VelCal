@@ -15,7 +15,8 @@ Installers include standalone and VST3 on Windows, Linux, and
 macOS, plus an AU MIDI effect for Logic on macOS. VelCal has been tested on
 Windows, Linux Mint, and macOS. Testing is most extensive on Windows;
 Linux Mint and macOS testing has confirmed standalone MIDI input/output and
-plugin loading (VST3, plus AU on macOS). See
+plugin loading (VST3, plus AU on macOS). Broader DAW routing and calibration
+testing on Linux and macOS remains ongoing. See
 [installation and DAW routing](docs/INSTALLING.md) and
 [0.0.5 release notes](docs/releases/0.0.5.md), including unsigned-installer warnings
 and build-verification status.
@@ -61,26 +62,16 @@ you are ready to play through your DAW.
 <details>
 <summary><strong>Calibrate Your Keyboard</strong></summary>
 
-**What calibration does**
-
-Helps individual keys respond more evenly when played with similar strength,
-reducing differences where some keys consistently play louder or softer.
-
-**What it won't do**
-
-It won't change the keyboard's physical feel or repair mechanical faults.
-It also won't make every note equally loud: differences in how softly or
-firmly you play are preserved.
+Calibration helps keys respond more evenly to similar playing strength while
+preserving differences in how softly or firmly you play.
 
 **Use a spirit level or another straight, rigid object no longer than 50 cm.**
-This means the object's overall length. Start with a short group of keys:
+This means the object's overall length. Choose a smooth edge, keep it clean,
+and use a thin, even protective layer if needed to prevent scratches.
+Start with a short group of keys:
 pressing fewer keys together requires less combined force and makes firm
 presses easier to control. A 50 cm object may still cover too many keys for
 comfortable calibration on your keyboard.
-
-Use a rigid object with a straight, smooth edge, such as a straight piece of
-wood or a spirit level. Keep it clean, with a thin, even protective layer if
-needed to prevent scratches.
 
 VelCal groups presses by their median MIDI velocity:
 
@@ -105,11 +96,10 @@ manually adjust their individual velocity curves instead.
    contacts every key at the same distance from its front end, not diagonally.
 2. Select **Start section**, read the guide, then select **Begin capture**.
 3. Apply the downward force at the centre of the straight edge's length to
-   help distribute it evenly across the keys. Keep the edge level and in the
-   same position throughout the section. Avoid rocking or flexing, which can
-   distort the measurements.
-   Keep the same keys covered throughout each capture. If you need to change
-   the object's position or use a shorter section, start a fresh capture.
+   help distribute it evenly across the keys. Keep the edge level and in one
+   position over the same keys throughout each capture. Avoid rocking or
+   flexing, which can distort the measurements. If you need to reposition
+   the object or use a shorter section, start a fresh capture.
    Mix soft, medium, and firm presses, fully releasing the keys each time.
    The first few presses identify which keys are under the bar.
 4. Follow the live guidance until the section is ready. Each covered key needs
@@ -214,8 +204,6 @@ bridge.
 
 See the [ALSA MIDI Through implementation](https://github.com/torvalds/linux/blob/master/sound/core/seq/seq_dummy.c)
 and [aconnect documentation](https://github.com/alsa-project/alsa-utils/blob/master/seq/aconnect/aconnect.1).
-Standalone MIDI input/output has been confirmed on Linux Mint and macOS.
-Broader DAW routing and calibration testing remains ongoing.
 
 </details>
 
@@ -236,10 +224,8 @@ In **Global curve**, choose a preset or edit the curve to change the response
 of the whole keyboard after the individual key corrections. Its independent
 **Smooth** setting switches between smooth interpolation and straight lines
 between points. **Save preset** immediately saves a named curve to a shared
-library, available across profiles in standalone and plugins. Replacing a name
-requires confirmation; **Rename** and **Delete** manage the selected library
-preset. Applying a preset copies its curve into the profile, so later library
-changes do not alter existing profiles or DAW projects. Older profile-local
+library, available across profiles in standalone and plugins. **Rename** and
+**Delete** manage the selected library preset. Older profile-local
 presets remain available with a `(profile)` suffix; apply one and select
 **Save preset** to add it to the shared library.
 
@@ -248,9 +234,10 @@ Each saved custom preset also has its own `.velcal-curve.json` file in the
 these files automatically. Use **Export** to choose a location for a copy of
 the current global curve, then share that file. **Import** adds a single curve
 to your shared presets and applies it to the current profile without changing
-its per-key calibration. Duplicate preset names require confirmation before
-replacement. The applied curve remains part of the profile and DAW project,
-so recall does not depend on the shared file being present.
+its per-key calibration. Both saving and importing require confirmation before
+replacing an existing preset name. Applying a preset stores a copy of its curve
+in the profile and DAW project, so later library changes or a missing shared
+file do not affect recall.
 
 Playing a key selects it in the per-key view and scrolls it into view when
 needed, including when standalone routing is off. For chords, the last MIDI

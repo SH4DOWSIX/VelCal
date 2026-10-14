@@ -1,6 +1,6 @@
 # VelCal Project Handoff and Plan
 
-Last updated: 2026-10-13
+Last updated: 2026-10-14
 
 This is the durable starting point for a new VelCal development conversation.
 Read `AGENTS.md` first for workspace rules, then this file before proposing or
@@ -52,6 +52,17 @@ build outputs to `C:`. The drive is nearly full.
 See `AGENTS.md` for the authoritative rule.
 
 ## Current Status
+
+README duplication cleanup (2026-10-14, documentation-only): consolidated
+straight-edge requirements, fixed capture placement, preset replacement
+confirmation and independent curve recall. Shortened the calibration introduction
+while retaining playing dynamics and the opening physical-action limitations.
+Platform testing status and remaining limitations now appear together near the
+download link. Kept feature summaries, platform-specific routing instructions
+and white/black overlap reminders. Reviewed the diff and checked whitespace.
+The user subsequently authorized pushing these documentation changes. Remote
+main matched the local branch, and its only workflow was verified manual-only.
+No application changes or builds.
 
 0.0.5 published (2026-10-13), after the user approved the release notes and
 requested publication using the completed native builds:
